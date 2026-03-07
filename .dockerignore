@@ -1,0 +1,9 @@
+node_modules
+.next
+.git
+*.md
+.env*
+docker-compose.yml
+deploy/
+drizzle/
+data/

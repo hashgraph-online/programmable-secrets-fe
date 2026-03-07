@@ -1,0 +1,91 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: programmable-secrets
+  labels:
+    app: programmable-secrets
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: programmable-secrets
+  template:
+    metadata:
+      labels:
+        app: programmable-secrets
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      imagePullSecrets:
+        - name: docr-pull
+      initContainers:
+        - name: wait-for-postgres
+          image: postgres:16-alpine
+          securityContext:
+            runAsNonRoot: false
+            runAsUser: 0
+          command:
+            - sh
+            - -c
+            - |
+              until pg_isready -h programmable-secrets-postgres -U ps; do
+                echo "Waiting for postgres..."
+                sleep 2
+              done
+              echo "Postgres is ready"
+          envFrom:
+            - secretRef:
+                name: programmable-secrets-env
+      containers:
+        - name: programmable-secrets
+          image: registry.digitalocean.com/hashgraphonline/programmable-secrets-fe:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3000
+              name: http
+          envFrom:
+            - configMapRef:
+                name: programmable-secrets-config
+            - secretRef:
+                name: programmable-secrets-env
+          env:
+            - name: HOST
+              value: "0.0.0.0"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          volumeMounts:
+            - name: ciphertext-data
+              mountPath: /app/data/programmable-secrets
+          readinessProbe:
+            httpGet:
+              path: /api/ps/health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /api/ps/health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 6
+      volumes:
+        - name: ciphertext-data
+          persistentVolumeClaim:
+            claimName: programmable-secrets-ciphertext
+      terminationGracePeriodSeconds: 30

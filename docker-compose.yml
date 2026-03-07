@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ps
+      POSTGRES_PASSWORD: ps
+      POSTGRES_DB: ps
+    ports:
+      - '5433:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ps']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - '3002:3000'
+    environment:
+      DATABASE_URL: postgresql://ps:ps@postgres:5432/ps
+      KRS_MASTER_KEY: ${KRS_MASTER_KEY:-REDACTED_KRS_MASTER_KEY=}
+      CIPHERTEXT_STORAGE_ROOT: /app/data/programmable-secrets
+    volumes:
+      - ciphertext-data:/app/data/programmable-secrets
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  ciphertext-data:

@@ -1,0 +1,352 @@
+@import "tailwindcss";
+
+/* ============================================
+   Programmable Secrets — Design System
+   HOL Brand Aligned (hol.org)
+   Light mode default, dark mode via .dark class
+   ============================================ */
+
+@theme inline {
+  --font-sans: 'Roboto', system-ui, -apple-system, sans-serif;
+  --font-mono: 'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --color-brand-blue: var(--brand-blue);
+  --color-brand-green: var(--brand-green);
+  --color-brand-purple: var(--brand-purple);
+}
+
+:root {
+  /* HOL Brand Colors — constant across themes */
+  --brand-blue: #5599fe;
+  --brand-green: #48df7b;
+  --brand-purple: #b56cff;
+  --brand-dark: #3f4174;
+
+  /* ── Light mode tokens (default) ── */
+  --background: #ffffff;
+  --foreground: #3f4174;
+
+  --surface-0: #ffffff;
+  --surface-1: #f8f9fb;
+  --surface-2: #f0f2f6;
+  --surface-3: #e5e8ef;
+  --surface-4: #d8dde6;
+
+  --text-primary: #3f4174;
+  --text-secondary: #6b7094;
+  --text-tertiary: #9499b5;
+  --text-inverse: #ffffff;
+
+  --border: rgba(63, 65, 116, 0.10);
+  --border-hover: rgba(63, 65, 116, 0.18);
+  --border-focus: rgba(85, 153, 254, 0.4);
+
+  --accent-red: #ef4444;
+  --accent-green: var(--brand-green);
+  --accent-blue: var(--brand-blue);
+
+  /* Gradients — HOL */
+  --gradient-brand: linear-gradient(135deg, #5599fe 0%, #b56cff 50%, #48df7b 100%);
+  --gradient-nav: linear-gradient(135deg, rgba(85, 153, 254, 0.95), rgba(63, 65, 116, 0.95));
+
+  /* Shadows — HOL */
+  --shadow-brand-blue: 0 4px 14px 0 rgba(85, 153, 254, 0.39);
+  --shadow-brand-purple: 0 4px 14px 0 rgba(181, 108, 255, 0.39);
+  --shadow-brand-green: 0 4px 14px 0 rgba(72, 223, 123, 0.39);
+  --shadow-glow-blue: 0 0 20px rgba(85, 153, 254, 0.3);
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-card-hover: 0 4px 12px rgba(0, 0, 0, 0.08), 0 2px 4px rgba(0, 0, 0, 0.04);
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+}
+
+/* ── Dark mode ── */
+.dark {
+  color-scheme: dark;
+  --background: #050810;
+  --foreground: #ededed;
+
+  --surface-0: #050810;
+  --surface-1: #0c0f18;
+  --surface-2: #141822;
+  --surface-3: #1c2130;
+  --surface-4: #262d3e;
+
+  --text-primary: #ededed;
+  --text-secondary: #9ca3af;
+  --text-tertiary: #6b7280;
+  --text-inverse: #050810;
+
+  --border: rgba(255, 255, 255, 0.08);
+  --border-hover: rgba(255, 255, 255, 0.15);
+  --border-focus: rgba(85, 153, 254, 0.4);
+
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.3);
+  --shadow-card-hover: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+/* ── Reset & Base ── */
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--surface-0);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition: background 0.3s ease, color 0.3s ease;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+}
+
+a { color: inherit; text-decoration: none; }
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--surface-4); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-tertiary); }
+
+/* ── Surface Cards ── */
+.surface-card {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+.surface-card:hover {
+  border-color: var(--border-hover);
+  box-shadow: var(--shadow-card-hover);
+}
+
+.surface-card-static {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+}
+
+/* HOL brand card — with subtle blue glow on hover */
+.brand-card {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.brand-card:hover {
+  border-color: rgba(85, 153, 254, 0.2);
+  box-shadow: var(--shadow-card-hover), 0 0 24px rgba(85, 153, 254, 0.06);
+}
+
+/* ── Buttons — HOL Brand ── */
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 24px;
+  border-radius: var(--radius-md);
+  background: var(--brand-blue);
+  color: #ffffff;
+  font-weight: 600;
+  font-size: 14px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  letter-spacing: -0.01em;
+}
+.btn-primary:hover {
+  background: #6baaff;
+  box-shadow: var(--shadow-brand-blue);
+}
+.btn-primary:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.btn-outline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 24px;
+  border-radius: var(--radius-md);
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  font-weight: 500;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.btn-outline:hover {
+  border-color: var(--border-hover);
+  background: var(--surface-2);
+}
+.btn-outline:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-weight: 500;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.btn-ghost:hover {
+  background: var(--surface-3);
+  color: var(--text-primary);
+}
+
+/* ── Input ── */
+.input-field {
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--surface-0);
+  color: var(--text-primary);
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+.dark .input-field { background: var(--surface-2); }
+.input-field::placeholder { color: var(--text-tertiary); }
+.input-field:focus { border-color: var(--border-focus); }
+
+/* ── Tags — HOL brand ── */
+.tag-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(85, 153, 254, 0.08);
+  color: var(--brand-blue);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.tag-green {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(72, 223, 123, 0.08);
+  color: #16a34a;
+  font-size: 11px;
+  font-weight: 600;
+}
+.dark .tag-green { color: var(--brand-green); }
+
+.tag-subtle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+/* ── Status badge — matches HOL portal ── */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.status-badge-success {
+  background: rgba(72, 223, 123, 0.1);
+  color: #16a34a;
+  border: 1px solid rgba(72, 223, 123, 0.2);
+}
+.dark .status-badge-success { color: var(--brand-green); }
+.status-badge-info {
+  background: rgba(85, 153, 254, 0.1);
+  color: var(--brand-blue);
+  border: 1px solid rgba(85, 153, 254, 0.2);
+}
+
+/* ── Animations ── */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+@keyframes gradient-shift {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+.animate-in {
+  animation: fadeIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  opacity: 0;
+}
+.pulse-dot {
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+/* Stagger children */
+.stagger > * { opacity: 0; animation: fadeIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+.stagger > *:nth-child(1) { animation-delay: 0ms; }
+.stagger > *:nth-child(2) { animation-delay: 60ms; }
+.stagger > *:nth-child(3) { animation-delay: 120ms; }
+.stagger > *:nth-child(4) { animation-delay: 180ms; }
+.stagger > *:nth-child(5) { animation-delay: 240ms; }
+.stagger > *:nth-child(6) { animation-delay: 300ms; }
+
+/* Skeleton loading */
+.skeleton {
+  background: linear-gradient(90deg, var(--surface-2) 25%, var(--surface-3) 50%, var(--surface-2) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: var(--radius-sm);
+}
+
+/* ── Gradient text — HOL brand ── */
+.text-gradient-brand {
+  background: var(--gradient-brand);
+  background-size: 150% 150%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: gradient-shift 6s ease infinite;
+}

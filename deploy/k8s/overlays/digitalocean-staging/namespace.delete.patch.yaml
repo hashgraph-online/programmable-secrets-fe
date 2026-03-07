@@ -1,0 +1,6 @@
+# Delete the base namespace resource (staging overlay provides its own)
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: programmable-secrets
+$patch: delete
