@@ -2,11 +2,11 @@ import { parseAbi, type Address } from 'viem';
 
 // ── Deployed contract addresses (Robinhood Testnet) ──
 export const POLICY_VAULT_ADDRESS: Address =
-  '0x0e65116044C731A1e0380c1E39f439f93fb77416';
+  '0x54c40c2863dB7eE2563C65CF83F5cc295e73bd6c';
 export const PAYMENT_MODULE_ADDRESS: Address =
-  '0x82637bff0e39f0B65C17BbC69f768602f093a1Ee';
+  '0xbff7f7671044Ae1C965C9D7d9050cBa3Da72356c';
 export const ACCESS_RECEIPT_ADDRESS: Address =
-  '0xE39Ae07F6226156d97C76B4ec6ac8697890Dd350';
+  '0x902c70193Fc36Ad1d115DcB0310C3F49fC4F5e7a';
 
 // ── ABI (human-readable) ──
 export const POLICY_VAULT_ABI = parseAbi([
