@@ -41,6 +41,7 @@
   --border-focus: rgba(85, 153, 254, 0.4);
 
   --accent-red: #ef4444;
+  --accent-amber: #f59e0b;
   --accent-green: var(--brand-green);
   --accent-blue: var(--brand-blue);
 
@@ -85,6 +86,7 @@
 
   --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.3);
   --shadow-card-hover: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --accent-amber: #fbbf24;
 }
 
 /* ── Reset & Base ── */

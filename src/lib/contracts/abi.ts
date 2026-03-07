@@ -2,16 +2,16 @@ import { parseAbi, type Address } from 'viem';
 
 // ── Deployed contract addresses (Robinhood Testnet) ──
 export const POLICY_VAULT_ADDRESS: Address =
-  '0xBd4E7A50e6c61Eb7dAA6c7485df88054E5b4796D';
+  '0x0e65116044C731A1e0380c1E39f439f93fb77416';
 export const PAYMENT_MODULE_ADDRESS: Address =
-  '0x24c6212B2673b85B71CFB3A7a767Ff691ea7D7A2';
+  '0x82637bff0e39f0B65C17BbC69f768602f093a1Ee';
 export const ACCESS_RECEIPT_ADDRESS: Address =
-  '0x849575C669e9fA3944880c77E8c77b5c1dE58c8D';
+  '0xE39Ae07F6226156d97C76B4ec6ac8697890Dd350';
 
 // ── ABI (human-readable) ──
 export const POLICY_VAULT_ABI = parseAbi([
   'function evaluatorRegistrationFee() view returns (uint256)',
-  'function registerPolicyEvaluator(address evaluator,bytes32 metadataHash)',
+  'function registerPolicyEvaluator(address evaluator,bytes32 metadataHash) payable',
   'function getPolicyEvaluator(address evaluator) view returns ((address registrant,bytes32 metadataHash,uint64 registeredAt,bool active,bool builtIn))',
   'function registerDataset(bytes32 ciphertextHash,bytes32 keyCommitment,bytes32 metadataHash,bytes32 providerUaidHash) returns (uint256 datasetId)',
   'function createPolicyForDataset(uint256 datasetId,address payout,address paymentToken,uint96 price,bytes32 metadataHash,(address evaluator,bytes configData)[] conditions) returns (uint256 policyId)',

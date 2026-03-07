@@ -3,10 +3,8 @@
  * Uses its own isolated Postgres instance — NOT shared with registry-broker.
  */
 import { drizzle } from 'drizzle-orm/node-postgres';
-import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { Pool } from 'pg';
 import * as schema from './schema';
-import { resolve } from 'path';
 
 let _pool: Pool | null = null;
 let _db: ReturnType<typeof drizzle<typeof schema>> | null = null;

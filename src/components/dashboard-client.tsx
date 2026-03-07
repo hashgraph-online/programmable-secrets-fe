@@ -2,14 +2,15 @@
 
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
-import { useAccount } from 'wagmi';
-import { formatEther } from 'viem';
 import { broker } from '@/lib/api/broker';
 import { PolicyCard } from '@/components/policy-card';
+import {
+  hasRuntimeWitness,
+  hasUaidGate,
+  type PolicyConditionViewModel,
+} from '@/lib/policy-evaluator-display';
 
 export function DashboardClient() {
-  const { address } = useAccount();
-
   const healthQuery = useQuery({
     queryKey: ['ps-health'],
     queryFn: () => broker.health(),
@@ -24,6 +25,14 @@ export function DashboardClient() {
 
   const policies = policiesQuery.data?.policies ?? [];
   const activePolicies = policies.filter((p) => p.active);
+  const robinhoodPolicies = policies.filter((p) => p.chainId === 46630);
+  const arbitrumPolicies = policies.filter((p) => p.chainId === 421614);
+  const uaidGatedPolicies = policies.filter((policy) =>
+    hasUaidGate((policy.conditions ?? []) as PolicyConditionViewModel[]),
+  );
+  const witnessPolicies = policies.filter((policy) =>
+    hasRuntimeWitness((policy.conditions ?? []) as PolicyConditionViewModel[]),
+  );
   const brokerOnline = healthQuery.isSuccess;
 
   return (
@@ -68,7 +77,7 @@ export function DashboardClient() {
             className="mb-10 max-w-xl leading-relaxed"
             style={{ color: 'var(--text-secondary)', fontSize: '1.05rem' }}
           >
-            Agents buy encrypted datasets, validate on-chain receipts, and decrypt client-side — all without trusting a third party. Policy-enforced access built on Hashgraph Online.
+            Financial agents buy encrypted intelligence, satisfy evaluator-backed policies, mint non-transferable receipts, and unlock client-side data. Robinhood powers the primary market flow and Arbitrum powers live UAID and ERC-8004 gating.
           </p>
 
           <div className="flex flex-wrap items-center gap-3 mb-16">
@@ -78,6 +87,8 @@ export function DashboardClient() {
             <a href="#marketplace" className="btn-outline no-underline">
               Browse Marketplace
             </a>
+            <span className="tag-subtle">Evaluator-driven policy engine</span>
+            <span className="tag-subtle">Receipt-backed unlocks</span>
           </div>
 
           {/* ── Flow Diagram ── */}
@@ -97,19 +108,19 @@ export function DashboardClient() {
                 {
                   num: '01',
                   title: 'Encrypt & List',
-                  desc: 'Data providers encrypt locally with AES-256-GCM and commit a policy on-chain. Plaintext never leaves the device.',
+                  desc: 'Providers encrypt locally with AES-256-GCM, register a dataset commitment, then attach evaluator modules like time windows, allowlists, and UAID ownership gates.',
                   accent: 'var(--brand-blue)',
                 },
                 {
                   num: '02',
                   title: 'Purchase & Mint',
-                  desc: 'Buyers pay on-chain and receive an ERC-721 access receipt. Payment goes directly to the provider.',
+                  desc: 'Buyers satisfy policy evaluators at purchase time and mint a non-transferable ERC-721 receipt. Settlement goes straight to the provider.',
                   accent: 'var(--brand-purple)',
                 },
                 {
                   num: '03',
                   title: 'Verify & Decrypt',
-                  desc: 'The Key Release Service validates the receipt, wraps the AES key with buyer\'s RSA public key, and decryption happens 100% client-side.',
+                  desc: 'Unlock validates on-chain receipt state, wraps the AES key to the buyer RSA key, and decryption happens fully in-browser with hash verification.',
                   accent: 'var(--brand-green)',
                 },
               ].map((step, i) => (
@@ -142,6 +153,31 @@ export function DashboardClient() {
               ))}
             </div>
           </div>
+        </div>
+      </section>
+
+      <section className="pb-12">
+        <div className="mx-auto max-w-7xl px-6">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {[
+              { label: 'Live policies', value: String(policies.length) },
+              { label: 'Robinhood policies', value: String(robinhoodPolicies.length) },
+              { label: 'Arbitrum UAID path', value: String(arbitrumPolicies.length) },
+              { label: 'Witness-required', value: String(witnessPolicies.length) },
+            ].map((metric) => (
+              <div key={metric.label} className="surface-card-static p-4">
+                <p className="text-xs uppercase tracking-wide" style={{ color: 'var(--text-tertiary)', letterSpacing: '0.08em' }}>
+                  {metric.label}
+                </p>
+                <p className="mt-2 text-2xl font-semibold">{metric.value}</p>
+              </div>
+            ))}
+          </div>
+          <p className="mt-3 text-xs" style={{ color: 'var(--text-tertiary)' }}>
+            {uaidGatedPolicies.length > 0
+              ? `${uaidGatedPolicies.length} policy${uaidGatedPolicies.length === 1 ? '' : 'ies'} currently enforce UAID/ERC-8004 ownership.`
+              : 'No UAID-gated policy is currently listed. Publish one from the provider flow to showcase the Arbitrum identity path.'}
+          </p>
         </div>
       </section>
 

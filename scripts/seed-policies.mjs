@@ -48,7 +48,6 @@ const ABI = parseAbi([
 
 // ── Helpers ──
 function buf2b64(buf) { return Buffer.from(buf).toString('base64'); }
-function buf2hex(buf) { return '0x' + Buffer.from(buf).toString('hex'); }
 
 async function post(path, body) {
   const res = await fetch(`${API_BASE}${path}`, {

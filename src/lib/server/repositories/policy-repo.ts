@@ -1,5 +1,4 @@
 import { and, desc, eq, inArray, type SQL } from 'drizzle-orm';
-import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { getDb } from '../db';
 import {
   holProgrammableSecretPolicies,
@@ -105,7 +104,7 @@ export interface ListProgrammableSecretPoliciesInput {
 
 export class ProgrammableSecretPolicyPgRepository {
   constructor(
-    private readonly db: NodePgDatabase<any> = getDb() as any,
+    private readonly db = getDb(),
     private readonly network: string = 'testnet',
   ) {}
 

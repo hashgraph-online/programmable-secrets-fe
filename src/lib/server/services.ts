@@ -34,6 +34,7 @@ const logger = {
 let _config: ProgrammableSecretsConfig | null = null;
 let _policyService: ProgrammableSecretsPolicyService | null = null;
 let _krsService: ProgrammableSecretsKrsService | null = null;
+const DEFAULT_KRS_MASTER_KEY = 'MISSING_KRS_MASTER_KEY=';
 
 function getConfig(): ProgrammableSecretsConfig {
   if (_config) return _config;
@@ -42,14 +43,14 @@ function getConfig(): ProgrammableSecretsConfig {
     network: 'testnet',
     chainId: 46630,
     rpcUrl: 'https://rpc.testnet.chain.robinhood.com/rpc',
-    paymentModuleAddress: '0x24c6212B2673b85B71CFB3A7a767Ff691ea7D7A2',
-    policyVaultAddress: '0xBd4E7A50e6c61Eb7dAA6c7485df88054E5b4796D',
-    accessReceiptAddress: '0x849575C669e9fA3944880c77E8c77b5c1dE58c8D',
-    agentIdentityRegistryAddress: '0xF287C269D17B923eBFFd1Eb76E6c3075286124Ad',
-    timeRangeConditionAddress: undefined,
-    uaidOwnershipConditionAddress: undefined,
-    addressAllowlistConditionAddress: undefined,
-    krsMasterKey: process.env.KRS_MASTER_KEY || 'REDACTED_KRS_MASTER_KEY=',
+    paymentModuleAddress: '0x82637bff0e39f0B65C17BbC69f768602f093a1Ee',
+    policyVaultAddress: '0x0e65116044C731A1e0380c1E39f439f93fb77416',
+    accessReceiptAddress: '0xE39Ae07F6226156d97C76B4ec6ac8697890Dd350',
+    agentIdentityRegistryAddress: '0x0000000000000000000000000000000000000000',
+    timeRangeConditionAddress: '0x27ac32dDeEC8324409e7F0536446615c9869D5C4',
+    uaidOwnershipConditionAddress: '0xfB8987521276cD73229aA4A2D9B4469E12b463Fe',
+    addressAllowlistConditionAddress: '0x00D801d8a84aC17F198E56f535dFD3B69CeeE51F',
+    krsMasterKey: process.env.KRS_MASTER_KEY || DEFAULT_KRS_MASTER_KEY,
     holBaseUrl: undefined,
     ciphertextStorageRoot: process.env.CIPHERTEXT_STORAGE_ROOT || 'data/programmable-secrets',
     pollingIntervalMs: 5000,

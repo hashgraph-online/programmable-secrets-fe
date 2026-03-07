@@ -14,8 +14,13 @@ import {
   parseAbiParameters,
 } from 'viem';
 import { waitForTransactionReceipt } from 'viem/actions';
-import { robinhoodTestnet, buildTxUrl } from '@/lib/contracts/chain';
+import {
+  buildAddressUrl,
+  buildTxUrl,
+  resolveProgrammableSecretsChain,
+} from '@/lib/contracts/chain';
 import { PAYMENT_MODULE_ABI, PAYMENT_MODULE_ADDRESS } from '@/lib/contracts/abi';
+import { getNetworkMeta } from '@/lib/contracts/networks';
 import { broker } from '@/lib/api/broker';
 import {
   parsePolicyMetadata,
@@ -32,6 +37,13 @@ import {
   bytesToArrayBuffer,
 } from '@/lib/crypto';
 import type { ProgrammableSecretsConditionWitness } from '@/lib/server/policy-conditions';
+import {
+  describeConditionKind,
+  describeConditionSummary,
+  formatWitnessLabel,
+  hasUaidGate,
+  uniqueEvaluatorCount,
+} from '@/lib/policy-evaluator-display';
 
 interface DecryptedResult {
   plaintext: string | null;
@@ -86,13 +98,8 @@ export default function PolicyDetailPage({ params }: { params: Promise<{ id: str
   const { id } = use(params);
   const policyId = Number(id);
   const queryClient = useQueryClient();
-  const { address, isConnected } = useAccount();
+  const { address, isConnected, chainId: connectedChainId } = useAccount();
   const { data: walletClient } = useWalletClient();
-
-  const publicClient = useMemo(
-    () => createPublicClient({ chain: robinhoodTestnet, transport: http() }),
-    [],
-  );
 
   const [purchaseTxHash, setPurchaseTxHash] = useState<string | null>(null);
   const [unlockError, setUnlockError] = useState<string | null>(null);
@@ -111,27 +118,40 @@ export default function PolicyDetailPage({ params }: { params: Promise<{ id: str
     queryFn: () => broker.getPolicy(policyId),
     enabled: Number.isFinite(policyId) && policyId > 0,
   });
+  const currentPolicy = policyQuery.data?.policy ?? null;
+  const targetChain = useMemo(
+    () => resolveProgrammableSecretsChain(currentPolicy?.chainId),
+    [currentPolicy?.chainId],
+  );
+  const targetNetwork = useMemo(
+    () => getNetworkMeta(currentPolicy?.chainId),
+    [currentPolicy?.chainId],
+  );
+  const publicClient = useMemo(
+    () => createPublicClient({ chain: targetChain, transport: http() }),
+    [targetChain],
+  );
 
   // Check on-chain if the connected wallet already has a receipt for this policy
   const receiptQuery = useQuery({
-    queryKey: ['ps-receipt', policyId, address],
+    queryKey: ['ps-receipt', policyId, address, currentPolicy?.paymentModuleAddress],
     queryFn: async () => {
       if (!address) return 0n;
       const result = await publicClient.readContract({
-        address: PAYMENT_MODULE_ADDRESS,
+        address: getAddress(currentPolicy?.paymentModuleAddress ?? PAYMENT_MODULE_ADDRESS),
         abi: PAYMENT_MODULE_ABI,
         functionName: 'receiptOfPolicyAndBuyer',
         args: [BigInt(policyId), address],
       });
       return result as bigint;
     },
-    enabled: Number.isFinite(policyId) && policyId > 0 && !!address,
+    enabled: Number.isFinite(policyId) && policyId > 0 && !!address && !!currentPolicy?.paymentModuleAddress,
     refetchInterval: purchaseTxHash ? 3000 : false, // Poll after purchase until receipt appears
   });
 
   const hasPurchased = !!purchaseTxHash || (receiptQuery.data != null && receiptQuery.data > 0n);
 
-  const policy = policyQuery.data?.policy ?? null;
+  const policy = currentPolicy;
   const metadata = parsePolicyMetadata(policy?.metadataJson);
   const purchaseConditionFields = useMemo(
     () =>
@@ -140,6 +160,11 @@ export default function PolicyDetailPage({ params }: { params: Promise<{ id: str
       ),
     [policy?.conditions],
   );
+  const conditionCount = policy?.conditionCount ?? policy?.conditions.length ?? 0;
+  const evaluatorCount = uniqueEvaluatorCount(policy?.conditions ?? []);
+  const uaidGated = hasUaidGate(policy?.conditions ?? []);
+  const chainMismatch =
+    isConnected && !!policy?.chainId && connectedChainId !== policy.chainId;
   const priceLabel = useMemo(() => {
     if (!policy) return '—';
     try { return `${formatEther(BigInt(policy.priceWei))} ETH`; }
@@ -161,7 +186,7 @@ export default function PolicyDetailPage({ params }: { params: Promise<{ id: str
         functionName: 'purchase',
         args: [BigInt(policy.policyId), getAddress(address), runtimeInputs],
         value: BigInt(policy.priceWei),
-        chain: robinhoodTestnet,
+        chain: targetChain,
         account: walletClient.account,
       });
       await waitForTransactionReceipt(publicClient, { hash: tx });
@@ -182,22 +207,17 @@ export default function PolicyDetailPage({ params }: { params: Promise<{ id: str
 
       const buyerAddress = getAddress(address);
 
-      console.log('[unlock] 1/6 issuing nonce…');
       const nonce = await broker.createNonce({ policyId: policy.policyId, buyerAddress });
 
-      console.log('[unlock] 2/6 generating RSA key pair…');
       const keyPair = await generateBuyerKeyPair();
       const buyerRsaPublicKeyPem = await exportPublicKeyPem(keyPair.publicKey);
       const buyerPublicKeyFingerprint = await getPublicKeyFingerprint(keyPair.publicKey);
 
-      console.log('[unlock] 3/6 requesting wallet signature…');
       const signature = await walletClient.signMessage({
         account: walletClient.account,
         message: nonce.challengeMessage,
       });
-      console.log('[unlock] 3/6 signature obtained');
 
-      console.log('[unlock] 4/6 requesting key release…');
       let keyRequest = await broker.requestKey({
         requestId: nonce.requestId,
         policyId: policy.policyId,
@@ -207,22 +227,18 @@ export default function PolicyDetailPage({ params }: { params: Promise<{ id: str
         buyerRsaPublicKeyPem,
         buyerPublicKeyFingerprint,
       });
-      console.log('[unlock] 4/6 key request status:', keyRequest.status);
 
       if (keyRequest.status === 'pending' || keyRequest.status === 'nonce-issued') {
         keyRequest = await broker.pollKeyRequest(nonce.requestId);
       }
       if (keyRequest.status !== 'issued' || !keyRequest.encryptedKey) {
         const msg = keyRequest.errorMessage ?? `Key release denied (status: ${keyRequest.status})`;
-        console.error('[unlock] key denied:', msg);
         throw new Error(msg);
       }
 
-      console.log('[unlock] 5/6 decrypting AES key envelope…');
       const rawKey = await decryptEnvelope(keyPair.privateKey, keyRequest.encryptedKey);
       const aesKey = await importAesKeyBase64(bytesToBase64(rawKey));
 
-      console.log('[unlock] 6/6 fetching ciphertext & decrypting…');
       const ciphertextRaw = await broker.getPolicyCiphertext(policy.policyId);
       const ciphertextBytes = new Uint8Array(ciphertextRaw);
 
@@ -240,7 +256,6 @@ export default function PolicyDetailPage({ params }: { params: Promise<{ id: str
       } catch {
         // Fallback: ciphertext blob = iv(12) + tag(16) + encrypted_data
         // WebCrypto AES-GCM expects ciphertext = encrypted_data + tag
-        console.log('[unlock] primary decrypt failed, trying Node crypto format…');
         if (ciphertextBytes.length > 28) {
           const embeddedTag = ciphertextBytes.slice(12, 28);
           const encryptedData = ciphertextBytes.slice(28);
@@ -278,13 +293,11 @@ export default function PolicyDetailPage({ params }: { params: Promise<{ id: str
       setDecryptedResult(null);
     },
     onSuccess: (result) => {
-      console.log('[unlock] ✅ success — data decrypted');
       setDecryptedResult(result);
       queryClient.invalidateQueries({ queryKey: ['ps-policy'] });
     },
     onError: (e) => {
       const msg = e instanceof Error ? e.message : 'Decryption failed';
-      console.error('[unlock] ❌ error:', msg);
       setUnlockError(msg);
     },
   });
@@ -324,7 +337,16 @@ export default function PolicyDetailPage({ params }: { params: Promise<{ id: str
   const description = metadata?.description ?? 'Receipt-gated encrypted finance data access';
   const timeAgo = formatTimeAgo(policy.confirmedAt ?? policy.createdAt);
   const fileSize = formatFileSize(metadata?.sizeBytes);
-  const txUrl = buildTxUrl(policy.createdTxHash);
+  const txUrl = buildTxUrl(policy.createdTxHash, policy.chainId);
+  const policyVaultUrl = buildAddressUrl(policy.policyVaultAddress, policy.chainId);
+  const paymentModuleUrl = buildAddressUrl(policy.paymentModuleAddress, policy.chainId);
+  const providerAddressUrl = buildAddressUrl(policy.providerAddress, policy.chainId);
+  const payoutAddressUrl = buildAddressUrl(policy.payoutAddress, policy.chainId);
+  const explorerName = targetNetwork.shortName === 'Arbitrum' ? 'Arbiscan' : 'Robinhood explorer';
+  const networkStory =
+    targetNetwork.shortName === 'Arbitrum'
+      ? 'UAID and ERC-8004 identity-gated policy path'
+      : 'Primary finance-data marketplace flow';
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--surface-0)' }}>
@@ -343,6 +365,24 @@ export default function PolicyDetailPage({ params }: { params: Promise<{ id: str
                   {policy.active && <span className="h-1.5 w-1.5 rounded-full" style={{ background: 'var(--accent-green)' }} />}
                   {policy.active ? 'Active' : policy.status}
                 </span>
+                <span
+                  className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
+                  style={{
+                    background: `${targetNetwork.color}1A`,
+                    color: targetNetwork.color,
+                  }}
+                >
+                  <span
+                    className="h-1.5 w-1.5 rounded-full"
+                    style={{ background: targetNetwork.color }}
+                  />
+                  {targetNetwork.name}
+                </span>
+                {uaidGated && (
+                  <span className="tag-subtle" style={{ color: 'var(--brand-blue)' }}>
+                    UAID / ERC-8004 gated
+                  </span>
+                )}
                 {timeAgo && <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>Listed {timeAgo}</span>}
               </div>
               <h1 className="text-2xl font-semibold sm:text-3xl tracking-tight">{title}</h1>
@@ -354,6 +394,9 @@ export default function PolicyDetailPage({ params }: { params: Promise<{ id: str
                   {policy.providerUaid ? (policy.providerUaid.length > 28 ? `${policy.providerUaid.slice(0, 28)}…` : policy.providerUaid) : 'Anonymous provider'}
                 </span>
               </div>
+              <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                {networkStory}
+              </p>
             </div>
 
             <div>
@@ -367,8 +410,40 @@ export default function PolicyDetailPage({ params }: { params: Promise<{ id: str
                 {metadata?.mimeType && <span className="tag-subtle">{metadata.mimeType}</span>}
                 {fileSize && <span className="tag-subtle">{fileSize}</span>}
                 <span className="tag-subtle">AES-256-GCM</span>
+                <span className="tag-subtle">{conditionCount} condition{conditionCount === 1 ? '' : 's'}</span>
+                <span className="tag-subtle">{evaluatorCount} evaluator{evaluatorCount === 1 ? '' : 's'}</span>
               </div>
             </div>
+
+            {policy.conditions.length > 0 && (
+              <div className="space-y-3">
+                <h2 className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-tertiary)', letterSpacing: '0.08em' }}>
+                  Policy Evaluators
+                </h2>
+                <div className="space-y-2">
+                  {policy.conditions.map((condition) => (
+                    <div
+                      key={`${condition.index}-${condition.evaluatorAddress}`}
+                      className="rounded-xl p-4"
+                      style={{ border: '1px solid var(--border)', background: 'var(--surface-1)' }}
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-sm font-semibold">{describeConditionKind(condition)}</p>
+                        <span className="tag-subtle">
+                          Witness: {formatWitnessLabel(condition.runtimeWitness)}
+                        </span>
+                      </div>
+                      <p className="mt-2 text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                        {describeConditionSummary(condition)}
+                      </p>
+                      <p className="mt-2 text-[11px] truncate" style={{ color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>
+                        Evaluator: {condition.evaluatorAddress}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div>
               <button type="button" onClick={() => setShowProof((p) => !p)} className="flex items-center gap-2 text-sm font-medium cursor-pointer bg-transparent border-none" style={{ color: 'var(--text-tertiary)' }}>
@@ -378,18 +453,28 @@ export default function PolicyDetailPage({ params }: { params: Promise<{ id: str
               {showProof && (
                 <div className="mt-3 rounded-xl p-4 space-y-2 text-sm" style={{ background: 'var(--surface-1)', border: '1px solid var(--border)' }}>
                   {[
+                    { label: 'Chain', value: `${targetNetwork.name} (${policy.chainId})` },
+                    { label: 'Policy id', value: String(policy.policyId) },
                     { label: 'Ciphertext hash', value: policy.ciphertextHash },
                     { label: 'Key commitment', value: policy.keyCommitment },
                     { label: 'Metadata hash', value: policy.metadataHash },
                     { label: 'Policy vault', value: policy.policyVaultAddress },
                     { label: 'Payment module', value: policy.paymentModuleAddress },
+                    { label: 'Provider payout', value: policy.payoutAddress },
+                    { label: 'Provider wallet', value: policy.providerAddress },
                   ].map(({ label, value }) => (
                     <div key={label} className="flex items-start justify-between gap-4">
                       <span className="shrink-0 text-xs" style={{ color: 'var(--text-tertiary)' }}>{label}</span>
                       <span className="truncate text-[11px]" style={{ color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>{value}</span>
                     </div>
                   ))}
-                  {txUrl && <a href={txUrl} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-xs font-semibold hover:underline" style={{ color: 'var(--brand-blue)' }}>View on explorer ↗</a>}
+                  <div className="flex flex-wrap gap-2 pt-2">
+                    {txUrl && <a href={txUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-semibold hover:underline" style={{ color: 'var(--brand-blue)' }}>Creation tx ↗</a>}
+                    {policyVaultUrl && <a href={policyVaultUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-semibold hover:underline" style={{ color: 'var(--brand-blue)' }}>PolicyVault ↗</a>}
+                    {paymentModuleUrl && <a href={paymentModuleUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-semibold hover:underline" style={{ color: 'var(--brand-blue)' }}>PaymentModule ↗</a>}
+                    {providerAddressUrl && <a href={providerAddressUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-semibold hover:underline" style={{ color: 'var(--brand-blue)' }}>Provider ↗</a>}
+                    {payoutAddressUrl && <a href={payoutAddressUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-semibold hover:underline" style={{ color: 'var(--brand-blue)' }}>Payout ↗</a>}
+                  </div>
                 </div>
               )}
             </div>
@@ -446,7 +531,12 @@ export default function PolicyDetailPage({ params }: { params: Promise<{ id: str
             <div className="surface-card-static p-6 space-y-5">
               <div>
                 <p className="text-3xl font-semibold tracking-tight">{priceLabel}</p>
-                <p className="mt-1 text-xs" style={{ color: 'var(--text-tertiary)' }}>Settles on Robinhood Chain Testnet</p>
+                <p className="mt-1 text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                  Settles on {targetNetwork.name}
+                </p>
+                <p className="mt-1 text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                  Explorer: {explorerName}
+                </p>
               </div>
 
               <div className="flex items-center gap-1">
@@ -471,9 +561,16 @@ export default function PolicyDetailPage({ params }: { params: Promise<{ id: str
                   <ConnectButton />
                 </div>
               ) : (
-                <div className="rounded-xl p-3 flex items-center gap-2" style={{ border: '1px solid rgba(34,197,94,0.15)', background: 'rgba(34,197,94,0.04)' }}>
-                  <span className="h-2 w-2 rounded-full" style={{ background: 'var(--accent-green)' }} />
-                  <span className="text-xs font-semibold truncate" style={{ color: 'var(--accent-green)', fontFamily: 'var(--font-mono)' }}>{address}</span>
+                <div className="space-y-2">
+                  <div className="rounded-xl p-3 flex items-center gap-2" style={{ border: '1px solid rgba(34,197,94,0.15)', background: 'rgba(34,197,94,0.04)' }}>
+                    <span className="h-2 w-2 rounded-full" style={{ background: 'var(--accent-green)' }} />
+                    <span className="text-xs font-semibold truncate" style={{ color: 'var(--accent-green)', fontFamily: 'var(--font-mono)' }}>{address}</span>
+                  </div>
+                  {chainMismatch && (
+                    <div className="rounded-lg p-3 text-xs" style={{ border: '1px solid rgba(245,158,11,0.25)', background: 'rgba(245,158,11,0.08)', color: 'var(--accent-amber)' }}>
+                      Wallet network mismatch. Switch to chain {policy.chainId} ({targetNetwork.shortName}) before purchasing.
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -488,7 +585,7 @@ export default function PolicyDetailPage({ params }: { params: Promise<{ id: str
                         Purchase Witnesses
                       </p>
                       <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                        This policy needs runtime witness values when you purchase.
+                        Runtime witness values are passed to policy evaluators during purchase.
                       </p>
                     </div>
                     {purchaseConditionFields.map((condition) => {
@@ -542,7 +639,16 @@ export default function PolicyDetailPage({ params }: { params: Promise<{ id: str
                 )}
 
                 {!hasPurchased && (
-                  <button onClick={() => purchaseMutation.mutate()} disabled={purchaseMutation.isPending || !isConnected || !policy.policyId} className="btn-primary w-full">
+                  <button
+                    onClick={() => purchaseMutation.mutate()}
+                    disabled={
+                      purchaseMutation.isPending ||
+                      !isConnected ||
+                      !policy.policyId ||
+                      chainMismatch
+                    }
+                    className="btn-primary w-full"
+                  >
                     {purchaseMutation.isPending ? 'Purchasing…' : `Purchase for ${priceLabel}`}
                   </button>
                 )}
@@ -555,7 +661,16 @@ export default function PolicyDetailPage({ params }: { params: Promise<{ id: str
                 )}
 
                 {hasPurchased && !decryptedResult && (
-                  <button onClick={() => unlockMutation.mutate()} disabled={unlockMutation.isPending || !isConnected || !policy.policyId} className="btn-primary w-full">
+                  <button
+                    onClick={() => unlockMutation.mutate()}
+                    disabled={
+                      unlockMutation.isPending ||
+                      !isConnected ||
+                      !policy.policyId ||
+                      chainMismatch
+                    }
+                    className="btn-primary w-full"
+                  >
                     {unlockMutation.isPending ? (
                       <span className="flex items-center justify-center gap-2">
                         <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" /></svg>
@@ -575,7 +690,7 @@ export default function PolicyDetailPage({ params }: { params: Promise<{ id: str
 
               {purchaseTxHash && (
                 <p className="text-center text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                  Purchase tx: <a href={buildTxUrl(purchaseTxHash) ?? '#'} target="_blank" rel="noreferrer" className="font-semibold hover:underline" style={{ color: 'var(--brand-blue)' }}>View on explorer ↗</a>
+                  Purchase tx: <a href={buildTxUrl(purchaseTxHash, policy.chainId) ?? '#'} target="_blank" rel="noreferrer" className="font-semibold hover:underline" style={{ color: 'var(--brand-blue)' }}>View on {explorerName} ↗</a>
                 </p>
               )}
 

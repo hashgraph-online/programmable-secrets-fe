@@ -1,5 +1,4 @@
 import { and, desc, eq } from 'drizzle-orm';
-import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { getDb } from '../db';
 import {
   holProgrammableSecretPurchases,
@@ -43,7 +42,7 @@ export interface UpsertProgrammableSecretPurchaseInput {
 
 export class ProgrammableSecretPurchasePgRepository {
   constructor(
-    private readonly db: NodePgDatabase<any> = getDb() as any,
+    private readonly db = getDb(),
     private readonly network: string = 'testnet',
   ) {}
 

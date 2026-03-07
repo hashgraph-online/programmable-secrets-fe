@@ -4,6 +4,12 @@ import Link from 'next/link';
 import { formatEther } from 'viem';
 import { parsePolicyMetadata } from '@/lib/crypto';
 import { getNetworkMeta } from '@/lib/contracts/networks';
+import {
+  hasRuntimeWitness,
+  hasUaidGate,
+  uniqueEvaluatorCount,
+  type PolicyConditionViewModel,
+} from '@/lib/policy-evaluator-display';
 
 interface PolicyView {
   id: string | number;
@@ -14,6 +20,8 @@ interface PolicyView {
   active: boolean;
   status: string;
   metadataJson?: Record<string, unknown> | null;
+  conditionCount?: number | null;
+  conditions?: PolicyConditionViewModel[];
   confirmedAt?: string | null;
   createdAt?: string | null;
 }
@@ -24,6 +32,10 @@ export function PolicyCard({ policy }: { policy: PolicyView }) {
   const description = metadata?.description ?? 'Encrypted dataset';
   const mimeType = metadata?.mimeType ?? '';
   const net = getNetworkMeta(policy.chainId);
+  const conditions = policy.conditions ?? [];
+  const evaluatorCount = uniqueEvaluatorCount(conditions);
+  const uaidGated = hasUaidGate(conditions);
+  const witnessRequired = hasRuntimeWitness(conditions);
   const priceLabel = (() => {
     try {
       return `${formatEther(BigInt(policy.priceWei))} ${net.currencySymbol}`;
@@ -89,6 +101,26 @@ export function PolicyCard({ policy }: { policy: PolicyView }) {
         {mimeType && (
           <span className="tag-subtle" style={{ fontSize: '10px', padding: '2px 8px' }}>
             {mimeType}
+          </span>
+        )}
+        {(policy.conditionCount ?? 0) > 0 && (
+          <span className="tag-subtle" style={{ fontSize: '10px', padding: '2px 8px' }}>
+            {policy.conditionCount} condition{policy.conditionCount === 1 ? '' : 's'}
+          </span>
+        )}
+        {evaluatorCount > 0 && (
+          <span className="tag-subtle" style={{ fontSize: '10px', padding: '2px 8px' }}>
+            {evaluatorCount} evaluator{evaluatorCount === 1 ? '' : 's'}
+          </span>
+        )}
+        {uaidGated && (
+          <span className="tag-subtle" style={{ fontSize: '10px', padding: '2px 8px', color: 'var(--brand-blue)' }}>
+            UAID gate
+          </span>
+        )}
+        {witnessRequired && (
+          <span className="tag-subtle" style={{ fontSize: '10px', padding: '2px 8px' }}>
+            Runtime witness
           </span>
         )}
         <span className="tag-subtle" style={{ fontSize: '10px', padding: '2px 8px' }}>

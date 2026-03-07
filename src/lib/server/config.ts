@@ -3,15 +3,17 @@
  * Reads from environment variables at startup.
  */
 
+const DEFAULT_KRS_MASTER_KEY = 'MISSING_KRS_MASTER_KEY=';
+
 export const PS_CONFIG = {
   chainId: 46630,
   network: 'testnet' as const,
   rpcUrl: 'https://rpc.testnet.chain.robinhood.com/rpc',
-  policyVaultAddress: '0xBd4E7A50e6c61Eb7dAA6c7485df88054E5b4796D' as `0x${string}`,
-  paymentModuleAddress: '0x24c6212B2673b85B71CFB3A7a767Ff691ea7D7A2' as `0x${string}`,
-  accessReceiptAddress: '0x849575C669e9fA3944880c77E8c77b5c1dE58c8D' as `0x${string}`,
+  policyVaultAddress: '0x0e65116044C731A1e0380c1E39f439f93fb77416' as `0x${string}`,
+  paymentModuleAddress: '0x82637bff0e39f0B65C17BbC69f768602f093a1Ee' as `0x${string}`,
+  accessReceiptAddress: '0xE39Ae07F6226156d97C76B4ec6ac8697890Dd350' as `0x${string}`,
   get krsMasterKey(): string {
-    return process.env.KRS_MASTER_KEY || 'REDACTED_KRS_MASTER_KEY=';
+    return process.env.KRS_MASTER_KEY || DEFAULT_KRS_MASTER_KEY;
   },
   ciphertextDir: 'data/programmable-secrets',
 };

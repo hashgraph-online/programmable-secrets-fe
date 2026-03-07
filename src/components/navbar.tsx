@@ -1,21 +1,21 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { usePathname } from 'next/navigation';
 
 function ThemeToggle() {
-  const [isDark, setIsDark] = useState(false);
+  const [isDark, setIsDark] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem('ps-theme') === 'dark';
+  });
 
   useEffect(() => {
-    const stored = localStorage.getItem('ps-theme');
-    if (stored === 'dark') {
-      document.documentElement.classList.add('dark');
-      setIsDark(true);
-    }
-  }, []);
+    document.documentElement.classList.toggle('dark', isDark);
+    localStorage.setItem('ps-theme', isDark ? 'dark' : 'light');
+  }, [isDark]);
 
   const toggle = () => {
     const next = !isDark;
@@ -74,7 +74,6 @@ export function Navbar() {
     >
       <div className="mx-auto max-w-7xl px-6 max-md:px-4">
         <div className="flex items-center justify-between h-16 gap-6">
-          {/* Left — Logo + nav */}
           <div className="flex items-center gap-8">
             <Link href="/" className="flex items-center gap-2.5 no-underline">
               <Image
@@ -122,7 +121,6 @@ export function Navbar() {
             </div>
           </div>
 
-          {/* Right — Theme toggle + Wallet */}
           <div className="flex items-center gap-3">
             <ThemeToggle />
             <ConnectButton
