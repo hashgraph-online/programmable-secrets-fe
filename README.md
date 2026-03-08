@@ -11,7 +11,7 @@ This repository is the web application layer for the Programmable Secrets stack.
 
 ## Quick Navigation
 
-- Contracts source of truth: [`../programmable-secrets-contracts`](../programmable-secrets-contracts)
+- Contracts source of truth: [`hashgraph-online/programmable-secrets-contracts`](https://github.com/hashgraph-online/programmable-secrets-contracts)
 - Frontend app routes: `src/app/`
 - Runtime services: `src/lib/server/`
 - Components: `src/components/`
@@ -143,8 +143,8 @@ node scripts/test-unlock.mjs <policy-id>
 This frontend does not define canonical contract addresses in documentation.
 
 Use:
-- `../programmable-secrets-contracts/deployments/robinhood-testnet.json`
-- `../programmable-secrets-contracts/deployments/arbitrum-sepolia.json`
+- `https://github.com/hashgraph-online/programmable-secrets-contracts/blob/main/deployments/robinhood-testnet.json`
+- `https://github.com/hashgraph-online/programmable-secrets-contracts/blob/main/deployments/arbitrum-sepolia.json`
 
 The frontend runtime consumes:
 - contract addresses and ABI-compatible interfaces
