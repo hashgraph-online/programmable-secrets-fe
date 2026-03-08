@@ -1,74 +1,127 @@
 # Programmable Secrets Frontend
 
-Frontend for the Programmable Secrets policy-backed data access flow.
+Frontend for the Programmable Secrets marketplace, provider publishing flow, buyer unlock flow, and agent onboarding flow.
 
-This app exposes:
-- provider publishing flow
-- buyer purchase and unlock flow
-- agent onboarding flow with `skill-publish`
-- local API routes used by the frontend runtime
+This repository is the web application layer for the Programmable Secrets stack. It is responsible for:
+- marketplace and policy discovery UX
+- provider-side staged publish flow
+- buyer purchase, receipt, and unlock UX
+- agent onboarding and `skill-publish` handoff
+- local API routes for policy staging, indexing, nonce issuance, and key release
 
-## Update Notes (2026-03-07)
+## Quick Navigation
 
-- Replaced boilerplate template README with project-specific operator docs.
-- Added live URL, route map, Robinhood and Arbitrum story, and local run instructions.
-- Kept deployment guidance provider-neutral and public-safe.
+- Contracts source of truth: [`../programmable-secrets-contracts`](../programmable-secrets-contracts)
+- Frontend app routes: `src/app/`
+- Runtime services: `src/lib/server/`
+- Components: `src/components/`
+- Deployment manifests: `deploy/k8s/`
+- Operator scripts: `script/` and `scripts/`
 
-## Live App
+## Repository Layout
 
-- Base URL: [https://ps.hol.org](https://ps.hol.org)
-- Agent onboarding route: [https://ps.hol.org/agents](https://ps.hol.org/agents)
+| Path | Purpose |
+| --- | --- |
+| `src/app/` | Next.js App Router pages and API routes. |
+| `src/components/` | Marketplace, provider, policy, navigation, and onboarding UI. |
+| `src/lib/api/` | Browser-facing API clients. |
+| `src/lib/contracts/` | Chain metadata, ABIs, and contract address helpers. |
+| `src/lib/crypto/` | Buyer-side and provider-side crypto helpers for envelopes and payload handling. |
+| `src/lib/server/` | Server-only policy, KRS, DB, indexing, and registry integration services. |
+| `deploy/k8s/` | Kubernetes base and overlay manifests. |
+| `script/` | Operator-oriented scripts for policy management and dataset publishing. |
+| `scripts/` | Local/demo automation scripts for seeding and unlock testing. |
+| `drizzle/` | SQL migrations and schema snapshots. |
+| `public/` | Static assets. |
 
-## Live Subgraphs
+## System Integrations
 
-- Robinhood query endpoint: `https://ps-subgraph.hol.org/subgraphs/name/programmable-secrets-robinhood`
-- Arbitrum query endpoint: `https://ps-subgraph.hol.org/subgraphs/name/programmable-secrets-arbitrum`
+The frontend depends on the broader Programmable Secrets stack:
 
-DNS record for the new subgraph host:
-- Host: `ps-subgraph.hol.org`
-- Target ingress IP: `134.199.242.153`
-- Record type: `A`
+| Repository | Role |
+| --- | --- |
+| [`hashgraph-online/programmable-secrets-contracts`](https://github.com/hashgraph-online/programmable-secrets-contracts) | Canonical contract ABIs, deployment manifests, and subgraph package. |
+| [`hashgraph-online/programmable-secrets-skill`](https://github.com/hashgraph-online/programmable-secrets-skill) | Skill package linked from the `/agents` onboarding flow. |
+| [`hashgraph-online/registry-broker`](https://github.com/hashgraph-online/registry-broker) | Optional broker-backed identity and agent discovery integration. |
+| [`hashgraph-online/points-portal`](https://github.com/hashgraph-online/points-portal) | Related downstream portal surface that can consume programmable-secrets data. |
+| [`erc-8004/erc-8004-contracts`](https://github.com/erc-8004/erc-8004-contracts) | Upstream ERC-8004 identity registry contracts used for UAID-gated flows. |
 
-Quick query verification:
+For canonical addresses, always use the deployment manifests in `programmable-secrets-contracts` rather than copying values into frontend docs.
 
-```bash
-node -e "fetch('https://ps-subgraph.hol.org/subgraphs/name/programmable-secrets-robinhood',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({query:'{ _meta { block { number } } datasets(first:1){id datasetId} }'})}).then(async r=>{console.log(r.status);console.log(await r.text());});"
-```
+## Product Scope
 
-## Product Story
-
-- Primary chain path: Robinhood Chain testnet for the core financial data marketplace flow.
-- Secondary chain path: Arbitrum Sepolia for ERC-8004 / UAID-gated policy validation.
-- The frontend demonstrates purchase and unlock UX while the contract deployments and manifests remain the source of truth for addresses and policy semantics.
-- Providers can now choose whether a policy mints buyer-bound receipts or transferable receipts. That flag is stored in policy metadata, persisted in the app database, and confirmed against the onchain `PolicyCreated` state before the policy is finalized.
+- Primary chain path: Robinhood Chain testnet for the core data marketplace flow.
+- Secondary chain path: Arbitrum Sepolia for ERC-8004 and UAID-gated policy validation.
+- Providers can publish encrypted datasets and choose buyer-bound or transferable receipts.
+- Buyers can purchase access, obtain a nonce, request a wrapped content key, and decrypt locally.
+- Agents can onboard through the dedicated `/agents` surface and install supporting skill metadata.
 
 ## Route Map
 
 - `/` marketplace and policy discovery
 - `/provider` provider publishing flow
 - `/policy/[id]` policy purchase, receipt, and unlock flow
-- `/agents` agent and developer onboarding with `skill-publish`
-- `/api/ps/*` programmable-secrets API endpoints used by the app
+- `/agents` agent and developer onboarding
+- `/api/ps/*` programmable-secrets API endpoints used by the app runtime
 
-## Prerequisites
+## Environment Model
 
-- Node.js `>=20`
-- pnpm `>=10`
-- Wallet extension or WalletConnect-compatible wallet for purchase flows
-- Access to the corresponding backend and contract deployments when testing non-mocked behavior
+Required for meaningful local or deployed use:
+- `DATABASE_URL` or `POSTGRES_URL`
+- `KRS_MASTER_KEY`
+- `CIPHERTEXT_STORAGE_ROOT`
+
+Public/runtime config:
+- `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID`
+- `NEXT_PUBLIC_REGISTRY_ORIGIN`
+- `REGISTRY_BROKER_API_URL`
+
+Local/test script config:
+- `API_BASE`
+- `ETH_PK`
+- `RPC_URL`
+- `POLICY_VAULT_ADDRESS`
+- `BROKER_URL`
+- `API_KEY` or `API_KEYS`
+
+Safe bootstrap:
+
+```bash
+cp .env.example .env.local
+```
+
+Notes:
+- `KRS_MASTER_KEY` must be supplied explicitly. Do not rely on a checked-in or shared fallback.
+- Operator scripts in `script/` and `scripts/` require explicit env vars and do not read sibling repositories.
+- Deployment-specific hosts, ingress IPs, and secrets should stay outside tracked files.
 
 ## Local Development
 
-From `/Users/michaelkantor/CascadeProjects/hashgraph-online/programmable-secrets-fe`:
+Prerequisites:
+- Node.js `>=20`
+- pnpm `>=10`
+- PostgreSQL if not using Docker Compose
+- Wallet extension or WalletConnect-compatible wallet for purchase flows
+
+Run locally:
 
 ```bash
 pnpm install
+cp .env.example .env.local
 pnpm run dev
 ```
 
 Then open [http://localhost:3000](http://localhost:3000).
 
-## Production Build Check
+Optional local container stack:
+
+```bash
+docker compose up --build
+```
+
+## Verification
+
+Primary checks:
 
 ```bash
 pnpm run lint
@@ -76,9 +129,34 @@ pnpm run build
 pnpm run start
 ```
 
-## Agent Install Flow (Skill-Publish)
+Useful local scripts:
 
-The `/agents` page is aligned with pinned skill URL handoff patterns.
+```bash
+node script/manage-policies.mjs list
+node script/publish-test-datasets.mjs
+node scripts/seed-policies.mjs
+node scripts/test-unlock.mjs <policy-id>
+```
+
+## Contracts and Data Sources
+
+This frontend does not define canonical contract addresses in documentation.
+
+Use:
+- `../programmable-secrets-contracts/deployments/robinhood-testnet.json`
+- `../programmable-secrets-contracts/deployments/arbitrum-sepolia.json`
+
+The frontend runtime consumes:
+- contract addresses and ABI-compatible interfaces
+- indexed policy and purchase data
+- staged provider records in Postgres
+- ciphertext blobs from configured local or mounted storage
+
+## Agent Install Flow
+
+The `/agents` page is aligned with `skill-publish` install handoff patterns.
+
+Pinned skill URL:
 
 ```bash
 npx skill-publish install-url \
@@ -96,13 +174,14 @@ npx skill-publish install-url \
   --format pinned-manifest
 ```
 
-## Contracts and Address Source of Truth
+## Public Repo Guidance
 
-This frontend does not define canonical contract addresses in documentation.
-Use deployment manifests from the contracts repo:
-
-- `/Users/michaelkantor/CascadeProjects/hashgraph-online/programmable-secrets-contracts/deployments/robinhood-testnet.json`
-- `/Users/michaelkantor/CascadeProjects/hashgraph-online/programmable-secrets-contracts/deployments/arbitrum-sepolia.json`
+Before publishing or syncing this repository publicly:
+- do not commit real `KRS_MASTER_KEY`, wallet private keys, API keys, or kubeconfig files
+- keep deployment-specific secret material in external secret management or untracked env files
+- keep provider-specific infrastructure names and internal topology out of tracked docs where possible
+- treat contract deployment manifests in the contracts repo as the source of truth instead of duplicating addresses here
+- rotate any secret that was ever committed, even if history has been rewritten
 
 ## Common Failure Modes
 
@@ -110,9 +189,4 @@ Use deployment manifests from the contracts repo:
 - Backend service unavailable on expected API routes.
 - Missing runtime configuration in local or deployment environment.
 - Policy exists but buyer does not satisfy runtime witness requirements.
-
-## Deployment Notes (Public-Safe)
-
-- Docker and Kubernetes examples should stay generic and reusable.
-- Do not commit cluster-specific secrets, provider-specific secret names, or internal infrastructure topology.
-- Keep environment-specific values in deployment environment configuration, not in tracked docs.
+- KRS is unconfigured, so provider prepare or buyer unlock flows fail.
