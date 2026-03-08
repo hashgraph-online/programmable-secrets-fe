@@ -2,7 +2,7 @@
 
 /* ============================================
    Programmable Secrets — Design System
-   HOL Brand Aligned (hol.org)
+   Shared product theme
    Light mode default, dark mode via .dark class
    ============================================ */
 
@@ -32,8 +32,8 @@
   --surface-4: #d8dde6;
 
   --text-primary: #3f4174;
-  --text-secondary: #6b7094;
-  --text-tertiary: #9499b5;
+  --text-secondary: #4a4f72;
+  --text-tertiary: #6b7094;
   --text-inverse: #ffffff;
 
   --border: rgba(63, 65, 116, 0.10);
@@ -76,8 +76,8 @@
   --surface-4: #262d3e;
 
   --text-primary: #ededed;
-  --text-secondary: #9ca3af;
-  --text-tertiary: #6b7280;
+  --text-secondary: #b0b8c7;
+  --text-tertiary: #8b93a5;
   --text-inverse: #050810;
 
   --border: rgba(255, 255, 255, 0.08);
@@ -351,4 +351,13 @@ a { color: inherit; text-decoration: none; }
   -webkit-text-fill-color: transparent;
   background-clip: text;
   animation: gradient-shift 6s ease infinite;
+}
+
+/* ── P2 #15 — Mobile responsiveness ── */
+@media (max-width: 639px) {
+  .surface-card-static { padding: 1.25rem; }
+  section { padding-left: 1rem; padding-right: 1rem; }
+  pre { font-size: 11px; }
+  code { word-break: break-all; }
+  .tag-brand, .tag-green, .tag-subtle { font-size: 10px; padding: 3px 8px; }
 }

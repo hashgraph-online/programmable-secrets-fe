@@ -2,6 +2,15 @@
 
 import { useState, useCallback } from 'react';
 import Link from 'next/link';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import {
+  AGENT_FLOW_PROMPT,
+  AGENT_INSTALL_PROMPT,
+  AGENT_LATEST_SKILL_FILE_URL,
+  AGENT_PUBLISH_PROMPT,
+  AGENT_SKILL_FILE_URL,
+  AGENT_SKILL_VERSION,
+} from './prompt-content';
 
 /* ── Inline SVG icons ── */
 function IconUser() {
@@ -136,13 +145,24 @@ function PathCard({
 
 /* ── Main Page ── */
 export default function AgentsPage() {
-  const [path, setPath] = useState<'human' | 'agent'>('agent');
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
-  const skillFileUrl = 'https://raw.githubusercontent.com/hashgraph-online/programmable-secrets-skill/main/SKILL.md';
   const registryUrl = 'https://hol.org/registry/skills/programmable-secrets';
   const githubUrl = 'https://github.com/hashgraph-online/programmable-secrets-skill';
   const npmUrl = 'https://www.npmjs.com/package/skill-publish';
+  const requestedPath = searchParams.get('path');
+  const path: 'human' | 'agent' = requestedPath === 'human' ? 'human' : 'agent';
+
+  const handleSelectAgent = useCallback(() => {
+    router.replace(`${pathname}?path=agent`, { scroll: false });
+  }, [pathname, router]);
+
+  const handleSelectHuman = useCallback(() => {
+    router.replace(`${pathname}?path=human`, { scroll: false });
+  }, [pathname, router]);
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--surface-0)' }}>
@@ -192,7 +212,7 @@ export default function AgentsPage() {
                     skill-publish on npm
                   </DropdownLink>
                   <div className="h-px" style={{ background: 'var(--border)' }} />
-                  <DropdownLink href={skillFileUrl} external>
+                  <DropdownLink href={AGENT_SKILL_FILE_URL} external>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /><polyline points="10 9 9 9 8 9" /></svg>
                     Download SKILL.md
                   </DropdownLink>
@@ -221,7 +241,7 @@ export default function AgentsPage() {
             </a>
             <span className="tag-green">
               <span className="h-1.5 w-1.5 rounded-full" style={{ background: 'var(--brand-green)' }} />
-              v1.0.0
+              v{AGENT_SKILL_VERSION}
             </span>
             <span className="tag-subtle">Apache-2.0</span>
           </div>
@@ -233,9 +253,9 @@ export default function AgentsPage() {
             icon={<IconBot />}
             label="Agent Path"
             title="I'm an Agent"
-            description="Install the verified skill via npx skill-publish, resolve canonical URLs, and hand off to your agent runtime."
+            description="Resolve the pinned CDN install URL via skill-publish, then hand the canonical SKILL.md reference to your agent runtime."
             active={path === 'agent'}
-            onClick={() => setPath('agent')}
+            onClick={handleSelectAgent}
             accentColor="var(--brand-blue)"
           />
           <PathCard
@@ -244,7 +264,7 @@ export default function AgentsPage() {
             title="I'm a Developer"
             description="Human building agent workflows, deploying operators, or integrating the Programmable Secrets stack."
             active={path === 'human'}
-            onClick={() => setPath('human')}
+            onClick={handleSelectHuman}
             accentColor="var(--brand-purple)"
           />
         </div>
@@ -259,67 +279,138 @@ export default function AgentsPage() {
 
               <div className="space-y-6">
                 <div>
-                  <p className="text-sm font-semibold mb-2" style={{ color: 'var(--text-primary)' }}>1. Get pinned install URLs</p>
+                  <p className="text-sm font-semibold mb-2" style={{ color: 'var(--text-primary)' }}>1. Resolve the pinned CDN SKILL.md URL</p>
                   <p className="text-xs mb-3" style={{ color: 'var(--text-tertiary)' }}>
-                    Use <code style={{ color: 'var(--brand-blue)', background: 'rgba(85,153,254,0.08)', padding: '1px 4px', borderRadius: '4px' }}>npx skill-publish</code> to resolve the canonical, version-pinned resolver URLs. No clone or local files needed:
+                    Use <code style={{ color: 'var(--brand-blue)', background: 'rgba(85,153,254,0.08)', padding: '1px 4px', borderRadius: '4px' }}>npx skill-publish</code> to return the actual registry-hosted CDN URL for the published SKILL.md file:
                   </p>
-                  <CodeBlock title="terminal">{`# Get all install URLs for programmable-secrets v1.0.0
+                  <CodeBlock title="terminal">{`# Return the version-pinned CDN URL for SKILL.md
 npx skill-publish install-url \\
   --name programmable-secrets \\
-  --version 1.0.0
-
-# Get just the pinned SKILL.md resolver URL
-npx skill-publish install-url \\
-  --name programmable-secrets \\
-  --version 1.0.0 \\
+  --version ${AGENT_SKILL_VERSION} \\
   --format pinned-skill-md
 
-# Machine-readable JSON with all URLs
+# Return the latest registry-hosted SKILL.md URL
 npx skill-publish install-url \\
   --name programmable-secrets \\
-  --version 1.0.0 \\
+  --version ${AGENT_SKILL_VERSION} \\
+  --format latest-skill-md
+
+# Return the full install metadata as JSON
+npx skill-publish install-url \\
+  --name programmable-secrets \\
+  --version ${AGENT_SKILL_VERSION} \\
   --json`}</CodeBlock>
                 </div>
 
                 <div>
-                  <p className="text-sm font-semibold mb-2" style={{ color: 'var(--text-primary)' }}>2. Or use the canonical HRL directly</p>
+                  <p className="text-sm font-semibold mb-2" style={{ color: 'var(--text-primary)' }}>2. Copy a bounded prompt instead of improvising</p>
                   <p className="text-xs mb-3" style={{ color: 'var(--text-tertiary)' }}>
-                    The immutable on-chain reference for this skill. Paste into any runtime or config that accepts HCS Resource Locators:
+                    Short prompts work better when they still pin the command order, the example price, and the output you want back.
                   </p>
-                  <CodeBlock title="skill-hrl.txt">{`hcs://1/0.0.10352904`}</CodeBlock>
+                  <div className="space-y-4">
+                    <CodeBlock title="prompt: install">{AGENT_INSTALL_PROMPT}</CodeBlock>
+                    <CodeBlock title="prompt: publish">{AGENT_PUBLISH_PROMPT}</CodeBlock>
+                    <CodeBlock title="prompt: flow">{AGENT_FLOW_PROMPT}</CodeBlock>
+                  </div>
                 </div>
 
                 <div>
-                  <p className="text-sm font-semibold mb-2" style={{ color: 'var(--text-primary)' }}>3. Generate distribution assets</p>
+                  <p className="text-sm font-semibold mb-2" style={{ color: 'var(--text-primary)' }}>3. Pull the canonical references directly</p>
                   <p className="text-xs mb-3" style={{ color: 'var(--text-tertiary)' }}>
-                    Generate badges, README snippets, and the full attested distribution kit for embedding:
+                    These are the stable public surfaces to feed into your agent or fetch directly:
                   </p>
-                  <CodeBlock title="terminal">{`# Badge for docs or README
-npx skill-publish badge \\
-  --name programmable-secrets \\
-  --version 1.0.0
+                  <CodeBlock title="references">{`Registry page
+https://hol.org/registry/skills/programmable-secrets
 
-# README install snippet
-npx skill-publish readme-snippet \\
-  --name programmable-secrets \\
-  --version 1.0.0
+Homepage
+https://ps.hol.org
 
-# Full attested distribution kit (JSON)
-npx skill-publish attested-kit \\
-  --name programmable-secrets \\
-  --version 1.0.0 \\
-  --format json
+Pinned SKILL.md (CDN)
+${AGENT_SKILL_FILE_URL}
 
-# Release notes
-npx skill-publish release-notes \\
-  --name programmable-secrets \\
-  --version 1.0.0`}</CodeBlock>
+Latest SKILL.md (CDN)
+${AGENT_LATEST_SKILL_FILE_URL}
+
+Published manifest HRL
+hcs://1/0.0.10353000`}</CodeBlock>
+                </div>
+
+                <div>
+                  <p className="text-sm font-semibold mb-2" style={{ color: 'var(--text-primary)' }}>4. Operator defaults (agent-safe mode)</p>
+                  <p className="text-xs mb-3" style={{ color: 'var(--text-tertiary)' }}>
+                    For autonomous agents, default to machine-readable output and preview-first writes:
+                  </p>
+                  <CodeBlock title="terminal">{`# Machine-readable contract addresses
+npx programmable-secret contracts --agent-safe
+
+# List datasets and policies as JSON
+npx programmable-secret datasets list --json
+npx programmable-secret policies list --json
+
+# Preview a purchase before executing
+npx programmable-secret preview purchase --policy-id 1 --json`}</CodeBlock>
+                </div>
+
+                <div>
+                  <p className="text-sm font-semibold mb-2" style={{ color: 'var(--text-primary)' }}>5. Evaluator-driven workflow</p>
+                  <p className="text-xs mb-3" style={{ color: 'var(--text-tertiary)' }}>
+                    Inspect policy conditions and evaluator requirements before purchasing:
+                  </p>
+                  <CodeBlock title="terminal">{`# Inspect evaluators, datasets, and policies
+npx programmable-secret evaluators list --json
+npx programmable-secret datasets get --dataset-id 1 --json
+npx programmable-secret policies get --policy-id 1 --json
+
+# Execute purchase with UAID
+npx programmable-secret purchase --policy-id 1 --buyer-uaid uaid:aid:...
+
+# Verify access
+npx programmable-secret access policy --policy-id 1 --buyer 0x... --json
+npx programmable-secret receipts get --receipt-id 1 --json`}</CodeBlock>
+                </div>
+
+                <div>
+                  <p className="text-sm font-semibold mb-2" style={{ color: 'var(--text-primary)' }}>6. End-to-end flows</p>
+                  <p className="text-xs mb-3" style={{ color: 'var(--text-tertiary)' }}>
+                    Run complete golden-path flows. Robinhood is the default network; use env var for Arbitrum:
+                  </p>
+                  <CodeBlock title="terminal">{`# Robinhood default (direct flow)
+npx programmable-secret flow:direct
+
+# Arbitrum UAID-gated flow
+PROGRAMMABLE_SECRETS_NETWORK=arbitrum-sepolia npx programmable-secret flow:uaid
+
+# Broker-backed flow (register identity, UAID, purchase, decrypt)
+PROGRAMMABLE_SECRETS_NETWORK=arbitrum-sepolia npx programmable-secret flow:broker`}</CodeBlock>
+                </div>
+
+                <div>
+                  <p className="text-sm font-semibold mb-2" style={{ color: 'var(--text-primary)' }}>7. KRS helpers (encrypt / verify / decrypt)</p>
+                  <p className="text-xs mb-3" style={{ color: 'var(--text-tertiary)' }}>
+                    End-to-end bundle operations for pipeline integrity:
+                  </p>
+                  <CodeBlock title="terminal">{`# Encrypt data into a KRS bundle
+npx programmable-secret krs encrypt \\
+  --plaintext '{"signal":"buy","market":"TSLA"}' \\
+  --output bundle.json
+
+# Verify bundle against an on-chain policy
+npx programmable-secret krs verify \\
+  --bundle-file bundle.json \\
+  --policy-id 1 \\
+  --buyer 0x...
+
+# Decrypt the bundle
+npx programmable-secret krs decrypt --bundle-file bundle.json`}</CodeBlock>
                 </div>
 
                 <div className="p-4 rounded-xl" style={{ border: '1px solid rgba(85,153,254,0.15)', background: 'rgba(85,153,254,0.04)' }}>
                   <p className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-                    <strong style={{ color: 'var(--brand-blue)' }}>💡 How it works:</strong>{' '}
-                    The pinned SKILL.md resolver URL returns the full operator instructions. Your agent reads those instructions and follows them to run the Programmable Secrets CLI (<code style={{ color: 'var(--brand-blue)' }}>npx programmable-secret</code>). All contract commands, guided workflows, and operator rules are documented in the SKILL.md itself.
+                    <strong style={{ color: 'var(--brand-blue)' }}>💡 Agent rules:</strong>{' '}
+                    Prefer <code style={{ color: 'var(--brand-blue)' }}>--json</code> or <code style={{ color: 'var(--brand-blue)' }}>--agent-safe</code> for machine output.
+                    Run <code style={{ color: 'var(--brand-blue)' }}>preview</code> before all writes.
+                    Use <code style={{ color: 'var(--brand-blue)' }}>doctor</code> before debugging failures.
+                    Default network is Robinhood; use <code style={{ color: 'var(--brand-blue)' }}>PROGRAMMABLE_SECRETS_NETWORK=arbitrum-sepolia</code> for UAID flows.
                   </p>
                 </div>
               </div>
@@ -336,7 +427,8 @@ npx skill-publish release-notes \\
                   ['HRL (on-chain)', 'hcs://1/0.0.10352904'],
                   ['Directory Topic', '0.0.10273101'],
                   ['Package Topic', '0.0.10352904'],
-                  ['npm', 'npx skill-publish'],
+                  ['Pinned SKILL.md', AGENT_SKILL_FILE_URL],
+                  ['skill-publish', `npx skill-publish install-url --name programmable-secrets --version ${AGENT_SKILL_VERSION} --format pinned-skill-md`],
                 ].map(([label, value], i) => (
                   <div key={i}>
                     {i > 0 && <div className="h-px mb-3" style={{ background: 'var(--border)' }} />}
@@ -349,25 +441,25 @@ npx skill-publish release-notes \\
               </div>
             </div>
 
-            {/* Wallet-first setup */}
+            {/* Registry lookup */}
             <div className="surface-card-static p-6 sm:p-8">
               <h2 className="text-sm uppercase tracking-wider mb-4" style={{ color: 'var(--text-tertiary)', letterSpacing: '0.08em' }}>
-                Wallet-First Bootstrap (Optional)
+                Registry Lookup (Optional)
               </h2>
               <p className="text-sm mb-4" style={{ color: 'var(--text-secondary)' }}>
-                If you need to publish your own skills or manage credits, bootstrap with your Hedera wallet:
+                Inspect the published registry metadata after resolving the CDN URL:
               </p>
-              <CodeBlock title="terminal">{`# Create API key via ledger challenge and fund credits
-npx skill-publish setup \\
-  --account-id 0.0.12345 \\
-  --hedera-private-key <key> \\
-  --hbar 5
+              <CodeBlock title="terminal">{`# Latest published version
+npx @hol-org/registry skills list \\
+  --name programmable-secrets \\
+  --limit 1 \\
+  --json
 
-# Check your credentials
-npx skill-publish whoami
-
-# Check credit balance
-npx skill-publish credits`}</CodeBlock>
+# Specific published version
+npx @hol-org/registry skills get \\
+  --name programmable-secrets \\
+  --version ${AGENT_SKILL_VERSION} \\
+  --json`}</CodeBlock>
             </div>
           </div>
         )}

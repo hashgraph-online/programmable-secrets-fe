@@ -11,7 +11,7 @@
  *   node scripts/seed-policies.mjs
  *
  * Env:
- *   API_BASE  — default https://ps.hol.org
+ *   API_BASE  — default http://localhost:3000
  *   ETH_PK   — provider private key on Robinhood testnet
  */
 import {
@@ -30,7 +30,7 @@ import crypto from 'node:crypto';
 import { createUaid, toEip155Caip10 } from '@hashgraphonline/standards-sdk';
 
 // ── Config ──
-const API_BASE = process.env.API_BASE || 'https://ps.hol.org';
+const API_BASE = process.env.API_BASE || 'http://localhost:3000';
 const ETH_PK = process.env.ETH_PK;
 
 const robinhoodTestnet = defineChain({

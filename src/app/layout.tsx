@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Roboto, Roboto_Mono } from 'next/font/google';
 import './globals.css';
 import { ClientProviders } from '@/components/client-providers';
+import Footer from '@/components/footer';
 
 const roboto = Roboto({
   weight: ['400', '700'],
@@ -33,7 +34,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           color: '#3f4174',
         }}
       >
-        <ClientProviders>{children}</ClientProviders>
+        <ClientProviders>
+          {children}
+          <Footer />
+        </ClientProviders>
       </body>
     </html>
   );

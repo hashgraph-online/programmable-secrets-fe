@@ -20,6 +20,7 @@ export interface ProgrammableSecretsOnchainPolicy {
   priceWei: string;
   createdAtUnix: number;
   active: boolean;
+  allowlistEnabled: boolean;
   receiptTransferable: boolean;
   ciphertextHash: string;
   keyCommitment: string;
@@ -250,6 +251,7 @@ export class ProgrammableSecretsChainClient {
         priceWei: policy.price.toString(),
         createdAtUnix: Number(policy.createdAt),
         active: policy.active,
+        allowlistEnabled: policy.allowlistEnabled,
         receiptTransferable: policy.receiptTransferable,
         ciphertextHash: toLowerHex(policy.ciphertextHash),
         keyCommitment: toLowerHex(policy.keyCommitment),

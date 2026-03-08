@@ -9,11 +9,3 @@ resources:
   - service.yaml
   - ciphertext-pvc.yaml
 
-generatorOptions:
-  disableNameSuffixHash: true
-
-secretGenerator:
-  - name: programmable-secrets-env
-    envs:
-      - programmable-secrets.env
-    type: Opaque

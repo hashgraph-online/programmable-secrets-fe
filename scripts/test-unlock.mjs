@@ -3,8 +3,12 @@ import { createPublicClient, createWalletClient, http, defineChain, parseAbi } f
 import { privateKeyToAccount } from 'viem/accounts';
 import { waitForTransactionReceipt } from 'viem/actions';
 
-const API = process.env.API_BASE || 'https://ps.hol.org';
-const PK = process.env.ETH_PK || '0xREDACTED_PRIVATE_KEY';
+const API = process.env.API_BASE || 'http://localhost:3000';
+const PK = process.env.ETH_PK;
+
+if (!PK) {
+  throw new Error('ETH_PK is required');
+}
 
 const chain = defineChain({
   id: 46630, name: 'Robinhood Testnet',

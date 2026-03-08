@@ -9,37 +9,11 @@
  *   node script/manage-policies.mjs deactivate-all
  *   node script/manage-policies.mjs update-prices
  *
- * ETH_PK is loaded automatically from ../registry-broker/.env
+ * Requires ETH_PK to be provided explicitly via the environment.
  */
 
-import { readFileSync } from 'node:fs';
-import { resolve, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { createPublicClient, createWalletClient, http, parseAbi, formatEther } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-
-// Load ETH_PK from registry-broker/.env
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const envPath = resolve(__dirname, '../../registry-broker/.env');
-try {
-  const envContent = readFileSync(envPath, 'utf-8');
-  for (const line of envContent.split('\n')) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) continue;
-    const eqIdx = trimmed.indexOf('=');
-    if (eqIdx === -1) continue;
-    const key = trimmed.slice(0, eqIdx).trim();
-    let val = trimmed.slice(eqIdx + 1).trim();
-    // Strip surrounding quotes
-    if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
-      val = val.slice(1, -1);
-    }
-    if (!process.env[key]) process.env[key] = val;
-  }
-  console.log('Loaded env from', envPath);
-} catch {
-  console.log('Note: Could not load', envPath, '— using existing env vars');
-}
 
 // Ensure ETH_PK is 0x-prefixed
 if (process.env.ETH_PK && !process.env.ETH_PK.startsWith('0x')) {
@@ -47,8 +21,9 @@ if (process.env.ETH_PK && !process.env.ETH_PK.startsWith('0x')) {
 }
 
 // ── Config ──
-const RPC_URL = 'https://rpc.testnet.chain.robinhood.com/rpc';
-const POLICY_VAULT_ADDRESS = '0x1FC1624b70206825E9D60E6110F168FaF77E1c75';
+const RPC_URL = process.env.RPC_URL || 'https://rpc.testnet.chain.robinhood.com/rpc';
+const POLICY_VAULT_ADDRESS =
+  process.env.POLICY_VAULT_ADDRESS || '0x1FC1624b70206825E9D60E6110F168FaF77E1c75';
 
 const robinhoodTestnet = {
   id: 46630,

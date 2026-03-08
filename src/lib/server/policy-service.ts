@@ -13,6 +13,7 @@ import { AesGcmService } from './aes-gcm';
 import { ProgrammableSecretsChainClient } from './chain-client';
 import { CiphertextStore } from './ciphertext-store';
 import { resolveProgrammableSecretsChainTarget } from './contract-manifest';
+import { buildOnchainPolicyView } from './onchain-policy-view';
 import {
   buildPreparedConditions,
   computeConditionsHash,
@@ -710,7 +711,7 @@ export class ProgrammableSecretsPolicyService {
       return [];
     }
 
-    const policies = await this.policyRepository.listPolicies({
+    const records = await this.policyRepository.listPolicies({
       chainId: requestedChainId,
       contractAddress: target?.contractAddress,
       paymentModuleAddress: target?.paymentModuleAddress,
@@ -718,7 +719,35 @@ export class ProgrammableSecretsPolicyService {
       accessReceiptAddress: target?.accessReceiptAddress,
       limit,
     });
-    return Promise.all(policies.map((policy) => this.buildPolicyView(policy)));
+    const policies = await Promise.all(records.map((policy) => this.buildPolicyView(policy)));
+
+    const seenPolicyIds = new Set(
+      policies
+        .map((policy) => policy.policyId)
+        .filter((policyId): policyId is number => typeof policyId === 'number'),
+    );
+
+    const onchainPolicies = await this.getChainClient(requestedChainId).scanAllPolicies(
+      target.policyVaultAddress,
+      limit ?? 200,
+    );
+    const missingPolicies = onchainPolicies
+      .filter((policy) => policy.active && !seenPolicyIds.has(policy.policyId))
+      .map((policy) =>
+        buildOnchainPolicyView({
+          policyId: policy.policyId,
+          policy,
+          target,
+        }),
+      );
+
+    return [...policies, ...missingPolicies]
+      .sort(
+        (left, right) =>
+          new Date(right.confirmedAt ?? right.createdAt).getTime() -
+          new Date(left.confirmedAt ?? left.createdAt).getTime(),
+      )
+      .slice(0, limit ?? 200);
   }
 
   async getPolicyById(
@@ -740,7 +769,18 @@ export class ProgrammableSecretsPolicyService {
     });
 
     if (!policy) {
-      return null;
+      const onchainPolicy = await this.getChainClient(target.chainId).getPolicy(
+        target.policyVaultAddress,
+        policyId,
+      );
+      if (!onchainPolicy) {
+        return null;
+      }
+      return buildOnchainPolicyView({
+        policyId,
+        policy: onchainPolicy,
+        target,
+      });
     }
 
     return this.buildPolicyView(policy);

@@ -19,6 +19,7 @@ import { ProgrammableSecretPolicyPgRepository } from './repositories/policy-repo
 import { ProgrammableSecretKeyRequestPgRepository } from './repositories/key-request-repo';
 import { ProgrammableSecretPurchasePgRepository } from './repositories/purchase-repo';
 import { ProgrammableSecretsPolicyService } from './policy-service';
+import { ProgrammableSecretsPolicyImportService } from './policy-import-service';
 import { ProgrammableSecretsKrsService } from './krs-service';
 import type { ProgrammableSecretsConfig } from './types';
 
@@ -33,11 +34,12 @@ const logger = {
 
 let _config: ProgrammableSecretsConfig | null = null;
 let _policyService: ProgrammableSecretsPolicyService | null = null;
+let _policyImportService: ProgrammableSecretsPolicyImportService | null = null;
 let _krsService: ProgrammableSecretsKrsService | null = null;
-const DEFAULT_KRS_MASTER_KEY = 'MISSING_KRS_MASTER_KEY=';
 
 function getConfig(): ProgrammableSecretsConfig {
   if (_config) return _config;
+  const krsMasterKey = process.env.KRS_MASTER_KEY?.trim();
   _config = {
     enabled: true,
     network: 'testnet',
@@ -50,7 +52,7 @@ function getConfig(): ProgrammableSecretsConfig {
     timeRangeConditionAddress: '0xfc3Eaf2E05157eb604b05F55b1fC7588Ed39A8d0',
     uaidOwnershipConditionAddress: '0x0d3CEa0BD8e6aba73dD8BeBB63339a2120262D8D',
     addressAllowlistConditionAddress: '0x1D1b66d9B2F357076dEC883302494393A226D5a9',
-    krsMasterKey: process.env.KRS_MASTER_KEY || DEFAULT_KRS_MASTER_KEY,
+    krsMasterKey: krsMasterKey && krsMasterKey.length > 0 ? krsMasterKey : undefined,
     holBaseUrl: undefined,
     ciphertextStorageRoot: process.env.CIPHERTEXT_STORAGE_ROOT || 'data/programmable-secrets',
     pollingIntervalMs: 5000,
@@ -92,6 +94,22 @@ export async function getKrsService(): Promise<ProgrammableSecretsKrsService> {
     keyRequestRepo, policyRepo, purchaseRepo, aesGcm, rsaOaep, signatureService, chainClient, logger, config,
   );
   return _krsService;
+}
+
+export async function getPolicyImportService(): Promise<ProgrammableSecretsPolicyImportService> {
+  if (_policyImportService) return _policyImportService;
+  await initDb();
+  const config = getConfig();
+  const db: ProgrammableSecretsDb = getDb();
+  const policyRepo = new ProgrammableSecretPolicyPgRepository(db);
+  const ciphertextStore = new CiphertextStore({ logger, rootDir: config.ciphertextStorageRoot! });
+  const aesGcm = config.krsMasterKey ? new AesGcmService(config.krsMasterKey) : null;
+  const chainClient = new ProgrammableSecretsChainClient({ logger, rpcUrl: config.rpcUrl });
+  const policyService = await getPolicyService();
+  _policyImportService = new ProgrammableSecretsPolicyImportService(
+    policyRepo, ciphertextStore, aesGcm, chainClient, policyService, logger, config,
+  );
+  return _policyImportService;
 }
 
 export { getConfig };

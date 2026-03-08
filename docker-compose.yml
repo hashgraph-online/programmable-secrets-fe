@@ -27,7 +27,7 @@ services:
       - '3002:3000'
     environment:
       DATABASE_URL: postgresql://ps:ps@postgres:5432/ps
-      KRS_MASTER_KEY: ${KRS_MASTER_KEY:-REDACTED_KRS_MASTER_KEY=}
+      KRS_MASTER_KEY: ${KRS_MASTER_KEY}
       CIPHERTEXT_STORAGE_ROOT: /app/data/programmable-secrets
     volumes:
       - ciphertext-data:/app/data/programmable-secrets

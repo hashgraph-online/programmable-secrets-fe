@@ -191,6 +191,11 @@ export async function ensureMigrated(): Promise<void> {
     await pool.query(sql);
   }
 
+  await pool.query(`
+    ALTER TABLE "hol"."programmable_secret_policies"
+    ADD COLUMN IF NOT EXISTS "receipt_transferable" boolean DEFAULT false NOT NULL
+  `);
+
   // Create indexes (no IF NOT EXISTS for indexes, so wrap in try/catch)
   const indexes = [
     `CREATE UNIQUE INDEX IF NOT EXISTS "hol_ps_indexer_state_contract_worker_uniq" ON "hol"."programmable_secret_indexer_state" ("network","chain_id","contract_address","worker_key")`,

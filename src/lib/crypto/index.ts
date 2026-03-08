@@ -180,54 +180,52 @@ export async function hashMetadata(metadata: Record<string, unknown>): Promise<s
 // ── Policy metadata shape ──
 
 export interface PolicyMetadata {
-  title: string;
+  title?: string;
   description?: string;
-  fileName: string;
-  mimeType: string;
-  sizeBytes: number;
-  plaintextHash: string;
-  providerUaid: string;
-  priceWei: string;
-  createdAt: string;
-  cipher: { algorithm: 'AES-GCM'; ivBase64: string; version: 1 };
+  fileName?: string;
+  mimeType?: string;
+  sizeBytes?: number;
+  plaintextHash?: string;
+  providerUaid?: string;
+  priceWei?: string;
+  createdAt?: string;
+  cipher?: { algorithm: 'AES-GCM'; ivBase64: string; version: 1 };
   purchaseRequirements?: {
     receiptTransferable?: boolean;
     conditions?: unknown[];
   };
+  schema?: Record<string, unknown>;
 }
 
 export function parsePolicyMetadata(
   metadata: Record<string, unknown> | null | undefined,
 ): PolicyMetadata | null {
   if (!metadata) return null;
+  const parsed: PolicyMetadata = {};
   const cipher = metadata.cipher as Record<string, unknown> | null;
+
+  if (typeof metadata.title === 'string') parsed.title = metadata.title;
+  if (typeof metadata.description === 'string') parsed.description = metadata.description;
+  if (typeof metadata.fileName === 'string') parsed.fileName = metadata.fileName;
+  if (typeof metadata.mimeType === 'string') parsed.mimeType = metadata.mimeType;
+  if (typeof metadata.sizeBytes === 'number') parsed.sizeBytes = metadata.sizeBytes;
+  if (typeof metadata.plaintextHash === 'string') parsed.plaintextHash = metadata.plaintextHash;
+  if (typeof metadata.providerUaid === 'string') parsed.providerUaid = metadata.providerUaid;
+  if (typeof metadata.priceWei === 'string') parsed.priceWei = metadata.priceWei;
+  if (typeof metadata.createdAt === 'string') parsed.createdAt = metadata.createdAt;
   if (
-    typeof metadata.title !== 'string' ||
-    typeof metadata.fileName !== 'string' ||
-    typeof metadata.mimeType !== 'string' ||
-    typeof metadata.sizeBytes !== 'number' ||
-    typeof metadata.plaintextHash !== 'string' ||
-    typeof metadata.providerUaid !== 'string' ||
-    typeof metadata.priceWei !== 'string' ||
-    typeof metadata.createdAt !== 'string' ||
-    !cipher ||
-    cipher.algorithm !== 'AES-GCM' ||
-    typeof cipher.ivBase64 !== 'string' ||
-    cipher.version !== 1
-  )
-    return null;
-  return {
-    title: metadata.title,
-    description: typeof metadata.description === 'string' ? metadata.description : undefined,
-    fileName: metadata.fileName,
-    mimeType: metadata.mimeType,
-    sizeBytes: metadata.sizeBytes,
-    plaintextHash: metadata.plaintextHash,
-    providerUaid: metadata.providerUaid,
-    priceWei: metadata.priceWei,
-    createdAt: metadata.createdAt,
-    cipher: { algorithm: 'AES-GCM', ivBase64: cipher.ivBase64 as string, version: 1 },
-  };
+    cipher &&
+    cipher.algorithm === 'AES-GCM' &&
+    typeof cipher.ivBase64 === 'string' &&
+    cipher.version === 1
+  ) {
+    parsed.cipher = { algorithm: 'AES-GCM', ivBase64: cipher.ivBase64 as string, version: 1 };
+  }
+  if (metadata.schema && typeof metadata.schema === 'object') {
+    parsed.schema = metadata.schema as Record<string, unknown>;
+  }
+
+  return Object.keys(parsed).length > 0 ? parsed : null;
 }
 
 // ── File packaging ──

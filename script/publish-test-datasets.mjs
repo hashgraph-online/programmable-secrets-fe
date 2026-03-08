@@ -1,14 +1,11 @@
 #!/usr/bin/env node
 /**
  * Publish fresh test datasets through the full broker flow.
- * Loads ETH_PK from ../registry-broker/.env automatically.
+ * Requires ETH_PK and broker configuration to be provided explicitly.
  *
  * Usage: node script/publish-test-datasets.mjs
  */
 
-import { readFileSync } from 'node:fs';
-import { resolve, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import {
   createPublicClient,
@@ -21,33 +18,16 @@ import {
   getAddress,
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-
-// ── Load env ──
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const envPath = resolve(__dirname, '../../registry-broker/.env');
-try {
-  const envContent = readFileSync(envPath, 'utf-8');
-  for (const line of envContent.split('\n')) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) continue;
-    const eqIdx = trimmed.indexOf('=');
-    if (eqIdx === -1) continue;
-    const key = trimmed.slice(0, eqIdx).trim();
-    let val = trimmed.slice(eqIdx + 1).trim();
-    if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
-      val = val.slice(1, -1);
-    }
-    if (!process.env[key]) process.env[key] = val;
-  }
-} catch {}
+import { createUaid, toEip155Caip10 } from '@hashgraphonline/standards-sdk';
 if (process.env.ETH_PK && !process.env.ETH_PK.startsWith('0x')) {
   process.env.ETH_PK = '0x' + process.env.ETH_PK;
 }
 
 // ── Config ──
-const BROKER_URL = 'http://localhost:4000';
-const RPC_URL = 'https://rpc.testnet.chain.robinhood.com/rpc';
-const POLICY_VAULT_ADDRESS = '0x1FC1624b70206825E9D60E6110F168FaF77E1c75';
+const BROKER_URL = process.env.BROKER_URL || 'http://localhost:4000';
+const RPC_URL = process.env.RPC_URL || 'https://rpc.testnet.chain.robinhood.com/rpc';
+const POLICY_VAULT_ADDRESS =
+  process.env.POLICY_VAULT_ADDRESS || '0x1FC1624b70206825E9D60E6110F168FaF77E1c75';
 
 const robinhoodTestnet = {
   id: 46630,
@@ -89,7 +69,10 @@ function sha256Hex(data) {
 }
 
 // ── Broker API ──
-const API_KEY = (process.env.API_KEYS || '').split(',').map(k => k.trim()).filter(Boolean)[0] || '';
+const API_KEY =
+  process.env.API_KEY ||
+  (process.env.API_KEYS || '').split(',').map(k => k.trim()).filter(Boolean)[0] ||
+  '';
 if (API_KEY) {
   console.log(`Using API key: ${API_KEY.slice(0, 8)}…`);
 } else {

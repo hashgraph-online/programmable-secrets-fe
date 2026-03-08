@@ -11,6 +11,7 @@
   "dependencies": {
     "@metamask/sdk": "^0.34.0",
     "@rainbow-me/rainbowkit": "^2.2.10",
+    "@hashgraphonline/standards-sdk": "0.1.165",
     "@tanstack/react-query": "^5.90.21",
     "@types/pg": "^8.18.0",
     "better-sqlite3": "^12.6.2",

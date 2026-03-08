@@ -110,13 +110,13 @@ export function Navbar() {
                 );
               })}
               <a
-                href="https://hol.org"
+                href="https://github.com/hashgraph-online/programmable-secrets-contracts"
                 target="_blank"
                 rel="noreferrer"
                 className="text-[13px] no-underline font-semibold px-3 py-1.5 rounded-lg transition-colors duration-150"
                 style={{ color: 'rgba(255, 255, 255, 0.7)' }}
               >
-                hol.org ↗
+                Contracts ↗
               </a>
             </div>
           </div>
