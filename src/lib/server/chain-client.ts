@@ -117,6 +117,7 @@ const POLICY_VAULT_ABI = parseAbi([
   'function getPolicyCondition(uint256 policyId,uint256 index) view returns (address evaluator, bytes configData, bytes32 configHash)',
   'function evaluatorRegistrationFee() view returns (uint256)',
   'function getPolicyEvaluator(address evaluator) view returns ((address registrant,bytes32 metadataHash,uint64 registeredAt,bool active,bool builtIn))',
+  'function policyCount() view returns (uint256)',
   'event PolicyCreated(uint256 indexed policyId,uint256 indexed datasetId,address indexed provider,address payout,address paymentToken,uint256 price,bytes32 conditionsHash,uint32 conditionCount,bytes32 metadataHash,bytes32 datasetMetadataHash)',
   'event PolicyUpdated(uint256 indexed policyId,uint256 indexed datasetId,uint256 newPrice,bool active,bytes32 newMetadataHash)',
 ]);
@@ -174,6 +175,40 @@ export class ProgrammableSecretsChainClient {
       });
       return null;
     }
+  }
+
+  async getPolicyCount(policyVaultAddress: string): Promise<number> {
+    try {
+      const count = await this.client.readContract({
+        address: getAddress(policyVaultAddress),
+        abi: POLICY_VAULT_ABI,
+        functionName: 'policyCount',
+      });
+      return Number(count);
+    } catch (error) {
+      this.logger.warn('Failed to read policy count', {
+        policyVaultAddress,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return 0;
+    }
+  }
+
+  async scanAllPolicies(
+    policyVaultAddress: string,
+    limit = 50,
+  ): Promise<(ProgrammableSecretsOnchainPolicy & { policyId: number })[]> {
+    const count = await this.getPolicyCount(policyVaultAddress);
+    if (count === 0) return [];
+    const max = Math.min(count, limit);
+    const results: (ProgrammableSecretsOnchainPolicy & { policyId: number })[] = [];
+    for (let i = 1; i <= max; i++) {
+      const policy = await this.getPolicy(policyVaultAddress, i);
+      if (policy) {
+        results.push({ ...policy, policyId: i });
+      }
+    }
+    return results;
   }
 
   async getPolicy(
