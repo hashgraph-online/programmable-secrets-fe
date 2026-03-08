@@ -1,4 +1,4 @@
-export const AGENT_SKILL_VERSION = '1.0.3';
+export const AGENT_SKILL_VERSION = '1.0.4';
 
 export const AGENT_SKILL_FILE_URL = `https://hol.org/registry/api/v1/skills/programmable-secrets%40${AGENT_SKILL_VERSION}/SKILL.md`;
 export const AGENT_LATEST_SKILL_FILE_URL = 'https://hol.org/registry/api/v1/skills/programmable-secrets%40latest/SKILL.md';
@@ -8,8 +8,8 @@ export const AGENT_INSTALL_PROMPT = `Use the published programmable-secrets skil
 Goal: resolve the latest programmable-secrets skill URL and tell me the exact next command to run.
 
 Run these commands in order:
-1. npx skill-publish install-url --name programmable-secrets --version 1.0.3 --format latest-skill-md
-2. npx @hol-org/registry skills get --name programmable-secrets --version 1.0.3 --json
+1. npx skill-publish install-url --name programmable-secrets --version 1.0.4 --format latest-skill-md
+2. npx @hol-org/registry skills get --name programmable-secrets --version 1.0.4 --json
 3. npx programmable-secret help
 
 When you're done, report:
@@ -25,7 +25,7 @@ export const AGENT_PUBLISH_PROMPT = `Use the published skill and keep this as a 
 Goal: publish a TSLA buy signal on Robinhood testnet and create a 24 hour access policy priced at exactly 0.00001 ETH.
 
 Run these commands in order:
-1. npx skill-publish install-url --name programmable-secrets --version 1.0.3 --format latest-skill-md
+1. npx skill-publish install-url --name programmable-secrets --version 1.0.4 --format latest-skill-md
 2. npx programmable-secret doctor
 3. npx programmable-secret krs encrypt --plaintext '{"signal":"buy","market":"TSLA","confidence":"high","thesis":"Breakout continuation"}' --title "TSLA buy signal" --provider-uaid 'uaid:did:pkh:eip155:46630:0x1111111111111111111111111111111111111111;nativeId=eip155:46630:0x1111111111111111111111111111111111111111' --output ./tsla-buy-signal-bundle.json
 4. npx programmable-secret datasets register --wallet provider --register-provider-agent true --provider-uaid-require-erc8004 false --bundle-file ./tsla-buy-signal-bundle.json
@@ -55,7 +55,7 @@ export const AGENT_FLOW_PROMPT = `Use the published skill and run the built-in C
 Goal: prove the full Robinhood marketplace flow with the built-in golden path.
 
 Run these commands in order:
-1. npx skill-publish install-url --name programmable-secrets --version 1.0.3 --format latest-skill-md
+1. npx skill-publish install-url --name programmable-secrets --version 1.0.4 --format latest-skill-md
 2. npx programmable-secret doctor
 3. npx programmable-secret flow:direct
 

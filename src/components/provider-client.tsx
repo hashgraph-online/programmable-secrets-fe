@@ -685,8 +685,8 @@ export function ProviderClient() {
                             </div>
                           </div>
                           <div>
-                            <Label description="The cryptographic identity the buyer must hold via ERC-8004. Format: uaid:did:pkh:eip155:...">Required Buyer UAID</Label>
-                            <Input value={rule.requiredBuyerUaid || ''} onChange={e => updateRule(rule.id, { requiredBuyerUaid: e.target.value })} placeholder="uaid:did:pkh:eip155:..." className="font-mono text-xs" />
+                            <Label description="The ERC-8004 agent identity the buyer must hold. Format: uaid:aid:...">Required Buyer UAID</Label>
+                            <Input value={rule.requiredBuyerUaid || ''} onChange={e => updateRule(rule.id, { requiredBuyerUaid: e.target.value })} placeholder="uaid:aid:trading-agent;uid=421614:97;registry=erc-8004;proto=erc-8004;nativeId=421614:97" className="font-mono text-xs" />
                           </div>
                           <div>
                             <Label description="Explicit Agent Token ID verification in the Registry Broker.">Agent Token ID (Optional)</Label>
