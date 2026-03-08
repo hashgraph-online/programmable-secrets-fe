@@ -64,6 +64,7 @@ export interface ProgrammableSecretsPolicyView {
   expiresAtUnix: number | null;
   active: boolean;
   allowlistEnabled: boolean;
+  receiptTransferable: boolean;
   ciphertextHash: string;
   keyCommitment: string;
   metadataHash: string;

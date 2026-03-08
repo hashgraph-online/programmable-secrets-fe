@@ -1,6 +1,9 @@
 type Logger = { info: (...a: unknown[]) => void; warn: (...a: unknown[]) => void; debug: (...a: unknown[]) => void; error: (...a: unknown[]) => void };
 import { keccak256, toBytes } from 'viem';
-import { ProgrammableSecretPolicyPgRepository } from './repositories/policy-repo';
+import {
+  ProgrammableSecretPolicyPgRepository,
+  type UpsertIndexedProgrammableSecretPolicyInput,
+} from './repositories/policy-repo';
 import { ProgrammableSecretPurchasePgRepository } from './repositories/purchase-repo';
 import {
   type ProgrammableSecretCanonicalMetadata,
@@ -65,6 +68,7 @@ export interface PreparedProgrammableSecretPolicy {
     payoutAddress: string;
     paymentToken: string;
     priceWei: string;
+    receiptTransferable: boolean;
     conditions: Array<{
       evaluator: string;
       configData: `0x${string}`;
@@ -145,6 +149,7 @@ export class ProgrammableSecretsPolicyService {
         datasetId: onchainPolicy.datasetId,
         conditionsHash: onchainPolicy.conditionsHash,
         conditionCount: onchainPolicy.conditionCount,
+        receiptTransferable: onchainPolicy.receiptTransferable,
         conditions: onchainPolicy.conditions.map((condition, index) => ({
           index,
           evaluatorAddress: condition.evaluatorAddress,
@@ -267,6 +272,7 @@ export class ProgrammableSecretsPolicyService {
           : null,
       expiresAtUnix,
       allowlistEnabled: preparedConditions.allowlistEnabled,
+      receiptTransferable: preparedConditions.receiptTransferable,
       ciphertextHash,
       keyCommitment,
       metadataHash,
@@ -297,6 +303,7 @@ export class ProgrammableSecretsPolicyService {
         payoutAddress,
         paymentToken,
         priceWei,
+        receiptTransferable: preparedConditions.receiptTransferable,
         conditions: preparedConditions.conditions.map((condition) => ({
           evaluator: condition.evaluatorAddress,
           configData: condition.configDataHex as `0x${string}`,
@@ -507,6 +514,13 @@ export class ProgrammableSecretsPolicyService {
       );
       throw new Error('priceWei does not match the on-chain policy');
     }
+    if (record.receiptTransferable !== onchainPolicy.receiptTransferable) {
+      await this.policyRepository.markFailed(
+        record.id,
+        'receiptTransferable does not match the on-chain policy',
+      );
+      throw new Error('receiptTransferable does not match the on-chain policy');
+    }
     if (record.ciphertextHash !== onchainPolicy.ciphertextHash) {
       await this.policyRepository.markFailed(
         record.id,
@@ -612,40 +626,42 @@ export class ProgrammableSecretsPolicyService {
       contractAddress: target.contractAddress,
       policyId: input.policyId,
     });
+    const indexedPolicyInput: UpsertIndexedProgrammableSecretPolicyInput = {
+      network: target.network,
+      chainId: record.chainId,
+      contractAddress: target.contractAddress,
+      paymentModuleAddress: target.paymentModuleAddress,
+      policyVaultAddress: target.policyVaultAddress,
+      accessReceiptAddress: target.accessReceiptAddress,
+      policyId: input.policyId,
+      providerAddress: record.providerAddress,
+      payoutAddress: record.payoutAddress,
+      paymentToken: record.paymentToken,
+      priceWei: record.priceWei,
+      expiresAt: record.expiresAt,
+      expiresAtUnix: record.expiresAtUnix,
+      active: onchainPolicy.active,
+      allowlistEnabled: record.allowlistEnabled,
+      receiptTransferable: record.receiptTransferable,
+      ciphertextHash: record.ciphertextHash,
+      keyCommitment: record.keyCommitment,
+      metadataHash: record.metadataHash,
+      providerUaidHash: record.providerUaidHash,
+      providerUaid: record.providerUaid,
+      ciphertextPath: record.ciphertextPath,
+      encryptedKeyPayload,
+      metadataJson,
+      createdTxHash,
+      createdBlockNumber: receipt.blockNumber,
+      createdBlockHash: receipt.blockHash,
+      createdLogIndex: createdLog.logIndex,
+      policyCreatedAt,
+      confirmedAt,
+      status: existingRecord?.status === 'indexed' ? 'indexed' : 'finalized',
+    };
     const finalizedRecord =
       existingRecord && existingRecord.id !== record.id
-        ? await this.policyRepository.upsertIndexedPolicy({
-            network: target.network,
-            chainId: record.chainId,
-            contractAddress: target.contractAddress,
-            paymentModuleAddress: target.paymentModuleAddress,
-            policyVaultAddress: target.policyVaultAddress,
-            accessReceiptAddress: target.accessReceiptAddress,
-            policyId: input.policyId,
-            providerAddress: record.providerAddress,
-            payoutAddress: record.payoutAddress,
-            paymentToken: record.paymentToken,
-            priceWei: record.priceWei,
-            expiresAt: record.expiresAt,
-            expiresAtUnix: record.expiresAtUnix,
-            active: onchainPolicy.active,
-            allowlistEnabled: record.allowlistEnabled,
-            ciphertextHash: record.ciphertextHash,
-            keyCommitment: record.keyCommitment,
-            metadataHash: record.metadataHash,
-            providerUaidHash: record.providerUaidHash,
-            providerUaid: record.providerUaid,
-            ciphertextPath: record.ciphertextPath,
-            encryptedKeyPayload,
-            metadataJson,
-            createdTxHash,
-            createdBlockNumber: receipt.blockNumber,
-            createdBlockHash: receipt.blockHash,
-            createdLogIndex: createdLog.logIndex,
-            policyCreatedAt,
-            confirmedAt,
-            status: existingRecord.status === 'indexed' ? 'indexed' : 'finalized',
-          })
+        ? await this.policyRepository.upsertIndexedPolicy(indexedPolicyInput)
         : await this.policyRepository.finalizePolicy({
             id: input.stagedPolicyId,
             policyId: input.policyId,

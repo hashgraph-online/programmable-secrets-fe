@@ -9,9 +9,9 @@ export const PS_CONFIG = {
   chainId: 46630,
   network: 'testnet' as const,
   rpcUrl: 'https://rpc.testnet.chain.robinhood.com/rpc',
-  policyVaultAddress: '0x54c40c2863dB7eE2563C65CF83F5cc295e73bd6c' as `0x${string}`,
-  paymentModuleAddress: '0xbff7f7671044Ae1C965C9D7d9050cBa3Da72356c' as `0x${string}`,
-  accessReceiptAddress: '0x902c70193Fc36Ad1d115DcB0310C3F49fC4F5e7a' as `0x${string}`,
+  policyVaultAddress: '0x073fc3fE9B2c00E470199550870D458D13421614' as `0x${string}`,
+  paymentModuleAddress: '0x5b4a056d2203C5940257635F073A253B958ba43c' as `0x${string}`,
+  accessReceiptAddress: '0x4Aa65779ce3dF24E5EeC7a786721765dF50a106b' as `0x${string}`,
   get krsMasterKey(): string {
     return process.env.KRS_MASTER_KEY || DEFAULT_KRS_MASTER_KEY;
   },

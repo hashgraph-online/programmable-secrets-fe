@@ -50,6 +50,7 @@ export async function GET() {
         paymentToken: p.paymentToken,
         priceWei: p.priceWei,
         expiresAtUnix: null,
+        receiptTransferable: p.receiptTransferable,
         conditionsHash: p.conditionsHash,
         conditionCount: p.conditionCount,
         conditions: p.conditions.map((c, idx) => ({

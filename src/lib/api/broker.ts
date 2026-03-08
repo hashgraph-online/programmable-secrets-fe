@@ -65,6 +65,7 @@ export interface PolicyView {
   paymentToken: string;
   priceWei: string;
   expiresAtUnix: number | null;
+  receiptTransferable: boolean;
   conditionsHash: string | null;
   conditionCount: number | null;
   conditions: Array<{
@@ -127,6 +128,7 @@ export interface PreparedPolicy {
     payoutAddress: string;
     paymentToken: string;
     priceWei: string;
+    receiptTransferable: boolean;
     conditions: Array<{
       evaluator: `0x${string}`;
       configData: `0x${string}`;

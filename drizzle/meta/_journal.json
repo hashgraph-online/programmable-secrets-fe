@@ -8,6 +8,13 @@
       "when": 1772899465179,
       "tag": "0000_skinny_infant_terrible",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1772932796081,
+      "tag": "0001_friendly_red_wolf",
+      "breakpoints": true
     }
   ]
 }

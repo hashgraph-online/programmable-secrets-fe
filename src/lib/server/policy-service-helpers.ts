@@ -158,6 +158,7 @@ export const mapPolicyRecordToView = (
     expiresAtUnix: policy.expiresAtUnix ?? null,
     active: policy.active,
     allowlistEnabled: policy.allowlistEnabled,
+    receiptTransferable: policy.receiptTransferable,
     ciphertextHash: policy.ciphertextHash,
     keyCommitment: policy.keyCommitment,
     metadataHash: policy.metadataHash,

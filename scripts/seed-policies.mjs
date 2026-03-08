@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 /**
  * Seed script — creates demo policies end-to-end.
- * 1. Generates a fake file content, encrypts it client-side
+ * 1. Generates fake file content, encrypts it client-side
  * 2. POSTs to /api/ps/provider/prepare (stages policy + stores ciphertext)
- * 3. Sends on-chain txns: registerDataset + createTimeboundPolicy
+ * 3. Uses the conditions returned by prepare to send on-chain txns:
+ *    registerDataset + createPolicyForDataset
  * 4. POSTs to /api/ps/provider/confirm (finalises the policy row)
  *
  * Usage:
@@ -11,7 +12,7 @@
  *
  * Env:
  *   API_BASE  — default https://ps.hol.org
- *   ETH_PK   — deployer private key on Robinhood testnet
+ *   ETH_PK   — provider private key on Robinhood testnet
  */
 import {
   createWalletClient,
@@ -22,13 +23,15 @@ import {
   parseAbi,
   keccak256,
   toBytes,
+  getAddress,
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import crypto from 'node:crypto';
+import { createUaid, toEip155Caip10 } from '@hashgraphonline/standards-sdk';
 
 // ── Config ──
 const API_BASE = process.env.API_BASE || 'https://ps.hol.org';
-const ETH_PK = process.env.ETH_PK || '0xREDACTED_PRIVATE_KEY';
+const ETH_PK = process.env.ETH_PK;
 
 const robinhoodTestnet = defineChain({
   id: 46630,
@@ -38,16 +41,22 @@ const robinhoodTestnet = defineChain({
   testnet: true,
 });
 
-const POLICY_VAULT = '0x3e604b76Ca87682B4813053C0801Ab8f713f55A8';
+// Uses the PolicyVault address from the current deployment
+// The actual address comes from the `prepare` response.
 const ABI = parseAbi([
   'function registerDataset(bytes32 ciphertextHash,bytes32 keyCommitment,bytes32 metadataHash,bytes32 providerUaidHash) returns (uint256 datasetId)',
-  'function createTimeboundPolicy(uint256 datasetId,address payout,address paymentToken,uint96 price,uint64 expiresAt,bool allowlistEnabled,bytes32 metadataHash,address[] allowlistAccounts) returns (uint256 policyId)',
+  'function createPolicyForDataset(uint256 datasetId,address payout,address paymentToken,uint96 price,bool receiptTransferable,bytes32 metadataHash,(address evaluator,bytes configData)[] conditions) returns (uint256 policyId)',
   'event DatasetRegistered(uint256 indexed datasetId,address indexed provider,bytes32 ciphertextHash,bytes32 keyCommitment,bytes32 metadataHash,bytes32 providerUaidHash)',
-  'event PolicyCreated(uint256 indexed policyId,uint256 indexed datasetId,address indexed provider,address payout,address paymentToken,bytes32 policyType,uint256 price,uint64 expiresAt,bool allowlistEnabled,bytes32 metadataHash,bytes32 datasetMetadataHash)',
+  'event PolicyCreated(uint256 indexed policyId,uint256 indexed datasetId,address indexed provider,address payout,address paymentToken,uint256 price,bool receiptTransferable,bytes32 conditionsHash,uint32 conditionCount,bytes32 metadataHash,bytes32 datasetMetadataHash)',
 ]);
 
 // ── Helpers ──
 function buf2b64(buf) { return Buffer.from(buf).toString('base64'); }
+
+function deriveWalletUaid(address, chainId = robinhoodTestnet.id) {
+  const nativeId = toEip155Caip10(chainId, getAddress(address));
+  return createUaid(`did:pkh:${nativeId}`, { nativeId });
+}
 
 async function post(path, body) {
   const res = await fetch(`${API_BASE}${path}`, {
@@ -67,7 +76,7 @@ const DATASETS = [
     description: 'High-resolution implied-volatility surface for TSLA options, 30-min snapshots across all listed strikes & maturities.',
     fileName: 'tsla-vol-surface-q1-2026.csv',
     mimeType: 'text/csv',
-    priceEth: '0.0001',
+    priceEth: '0.00001',
     expiresHours: 720,
     content: 'strike,expiry,iv,delta,gamma,theta,vega\n150,2026-03-21,0.42,0.65,0.012,-0.15,0.38\n160,2026-03-21,0.39,0.55,0.015,-0.12,0.41\n170,2026-03-21,0.35,0.45,0.018,-0.10,0.44\n180,2026-06-20,0.38,0.50,0.014,-0.08,0.52\n190,2026-06-20,0.34,0.40,0.016,-0.07,0.55\n200,2026-09-18,0.31,0.35,0.019,-0.05,0.58',
   },
@@ -76,7 +85,7 @@ const DATASETS = [
     description: 'Real-time cross-DEX arbitrage opportunities detected on Robinhood Chain testnet with confidence scores.',
     fileName: 'dex-arb-signals.json',
     mimeType: 'application/json',
-    priceEth: '0.00005',
+    priceEth: '0.00001',
     expiresHours: 168,
     content: JSON.stringify({
       signals: [
@@ -91,7 +100,7 @@ const DATASETS = [
     description: 'Independent security audit report for a DeFi yield-vault contract. Includes vulnerability findings, severity ratings, and remediation steps.',
     fileName: 'audit-report-defi-vault.json',
     mimeType: 'application/json',
-    priceEth: '0.001',
+    priceEth: '0.00001',
     expiresHours: 2160,
     content: JSON.stringify({
       audit: {
@@ -113,9 +122,13 @@ const DATASETS = [
 
 // ── Main ──
 async function main() {
+  if (!ETH_PK) {
+    throw new Error('ETH_PK is required');
+  }
+
   const account = privateKeyToAccount(ETH_PK);
   const address = account.address;
-  const providerUaid = `uaid:eip155:46630:${address.toLowerCase()}`;
+  const providerUaid = deriveWalletUaid(address);
 
   console.log(`\n🔐 Seeding policies on ${API_BASE}`);
   console.log(`   Provider: ${address}`);
@@ -141,8 +154,6 @@ async function main() {
     const contentBytes = Buffer.from(ds.content, 'utf-8');
     const encrypted = Buffer.concat([cipher.update(contentBytes), cipher.final()]);
     const tag = cipher.getAuthTag();
-    // WebCrypto AES-GCM outputs ciphertext = encrypted_data + auth_tag (tag appended).
-    // The IV is stored separately in metadata.cipher.ivBase64.
     const ciphertext = Buffer.concat([encrypted, tag]);
     const contentKeyB64 = buf2b64(aesKey);
     const ciphertextBase64 = buf2b64(ciphertext);
@@ -151,6 +162,8 @@ async function main() {
     const priceWei = parseEther(ds.priceEth).toString();
     const expiresAtUnix = Math.floor(Date.now() / 1000) + ds.expiresHours * 3600;
 
+    // Include purchaseRequirements in metadata so the backend generates
+    // the same on-chain conditions that we will submit to createPolicyForDataset.
     const metadata = {
       title: ds.title,
       description: ds.description,
@@ -162,6 +175,15 @@ async function main() {
       priceWei,
       createdAt: new Date().toISOString(),
       cipher: { algorithm: 'AES-GCM', ivBase64: buf2b64(iv), version: 1 },
+      purchaseRequirements: {
+        conditions: [
+          {
+            kind: 'time-range',
+            notBeforeUnix: null,
+            notAfterUnix: expiresAtUnix,
+          },
+        ],
+      },
     };
 
     // 2. Prepare with backend
@@ -178,10 +200,23 @@ async function main() {
     });
     console.log(`   ✅ Staged: ${prepared.stagedPolicyId}`);
 
+    const policyVaultAddress = prepared.policyVaultAddress;
+    console.log(`   📋 PolicyVault: ${policyVaultAddress}`);
+
+    // Use conditions from the prepared response to ensure consistency
+    const onchainConditions = (prepared.onchainInputs?.conditions ?? []).map(c => ({
+      evaluator: c.evaluator,
+      configData: c.configData,
+    }));
+    console.log(`   📋 Conditions: ${onchainConditions.length} (from prepare response)`);
+    for (const c of onchainConditions) {
+      console.log(`      • ${c.evaluator} config=${c.configData.slice(0, 20)}...`);
+    }
+
     // 3. Register dataset on-chain
     console.log('   ⛓️  Registering dataset on-chain...');
     const registerHash = await walletClient.writeContract({
-      address: POLICY_VAULT,
+      address: policyVaultAddress,
       abi: ABI,
       functionName: 'registerDataset',
       args: [
@@ -201,28 +236,27 @@ async function main() {
     const datasetId = dsLog?.topics[1] ? BigInt(dsLog.topics[1]) : 1n;
     console.log(`   ✅ Dataset ID: ${datasetId}`);
 
-    // 4. Create policy on-chain
-    console.log('   📋 Creating policy on-chain...');
+    // 4. Create policy on-chain using conditions from prepare
+    console.log('   📋 Creating policy on-chain (createPolicyForDataset)...');
     const policyHash = await walletClient.writeContract({
-      address: POLICY_VAULT,
+      address: policyVaultAddress,
       abi: ABI,
-      functionName: 'createTimeboundPolicy',
+      functionName: 'createPolicyForDataset',
       args: [
         datasetId,
-        address,
-        '0x0000000000000000000000000000000000000000',
-        BigInt(priceWei),
-        BigInt(expiresAtUnix),
-        false,
-        prepared.onchainInputs?.metadataHash || prepared.metadataHash,
-        [],
+        address,                                                    // payout
+        '0x0000000000000000000000000000000000000000',                // paymentToken (native ETH)
+        BigInt(priceWei),                                           // price
+        prepared.onchainInputs.receiptTransferable,                 // receiptTransferable
+        prepared.onchainInputs?.metadataHash || prepared.metadataHash, // metadataHash
+        onchainConditions,                                          // conditions from prepare
       ],
     });
     console.log(`   Tx: ${policyHash}`);
     const policyReceipt = await publicClient.waitForTransactionReceipt({ hash: policyHash });
 
     const policyTopic = keccak256(
-      toBytes('PolicyCreated(uint256,uint256,address,address,address,bytes32,uint256,uint64,bool,bytes32,bytes32)')
+      toBytes('PolicyCreated(uint256,uint256,address,address,address,uint256,bool,bytes32,uint32,bytes32,bytes32)')
     );
     const pLog = policyReceipt.logs.find(l => l.topics[0] === policyTopic);
     const onchainPolicyId = pLog?.topics[1] ? Number(BigInt(pLog.topics[1])) : 1;

@@ -20,6 +20,7 @@ export interface ProgrammableSecretsOnchainPolicy {
   priceWei: string;
   createdAtUnix: number;
   active: boolean;
+  receiptTransferable: boolean;
   ciphertextHash: string;
   keyCommitment: string;
   metadataHash: string;
@@ -72,6 +73,7 @@ export type ProgrammableSecretsContractLog =
       payout: string;
       paymentToken: string;
       priceWei: string;
+      receiptTransferable: boolean;
       conditionsHash: string;
       conditionCount: number;
       metadataHash: string;
@@ -103,6 +105,7 @@ export type ProgrammableSecretsContractLog =
       paymentToken: string;
       priceWei: string;
       purchasedAtUnix: number;
+      receiptTransferable: boolean;
       ciphertextHash: string;
       keyCommitment: string;
       transactionHash: string;
@@ -112,13 +115,13 @@ export type ProgrammableSecretsContractLog =
     };
 
 const POLICY_VAULT_ABI = parseAbi([
-  'function getPolicy(uint256 policyId) view returns ((address provider,address payout,address paymentToken,uint96 price,uint64 createdAt,bool active,bool allowlistEnabled,bytes32 ciphertextHash,bytes32 keyCommitment,bytes32 metadataHash,bytes32 providerUaidHash,uint256 datasetId,bytes32 conditionsHash,uint32 conditionCount))',
+  'function getPolicy(uint256 policyId) view returns ((address provider,address payout,address paymentToken,uint96 price,uint64 createdAt,bool active,bool receiptTransferable,bool allowlistEnabled,bytes32 ciphertextHash,bytes32 keyCommitment,bytes32 metadataHash,bytes32 providerUaidHash,uint256 datasetId,bytes32 conditionsHash,uint32 conditionCount))',
   'function getPolicyConditionCount(uint256 policyId) view returns (uint256)',
   'function getPolicyCondition(uint256 policyId,uint256 index) view returns (address evaluator, bytes configData, bytes32 configHash)',
   'function evaluatorRegistrationFee() view returns (uint256)',
   'function getPolicyEvaluator(address evaluator) view returns ((address registrant,bytes32 metadataHash,uint64 registeredAt,bool active,bool builtIn))',
   'function policyCount() view returns (uint256)',
-  'event PolicyCreated(uint256 indexed policyId,uint256 indexed datasetId,address indexed provider,address payout,address paymentToken,uint256 price,bytes32 conditionsHash,uint32 conditionCount,bytes32 metadataHash,bytes32 datasetMetadataHash)',
+  'event PolicyCreated(uint256 indexed policyId,uint256 indexed datasetId,address indexed provider,address payout,address paymentToken,uint256 price,bool receiptTransferable,bytes32 conditionsHash,uint32 conditionCount,bytes32 metadataHash,bytes32 datasetMetadataHash)',
   'event PolicyUpdated(uint256 indexed policyId,uint256 indexed datasetId,uint256 newPrice,bool active,bytes32 newMetadataHash)',
 ]);
 
@@ -129,7 +132,7 @@ const IDENTITY_REGISTRY_ABI = parseAbi([
 const PAYMENT_MODULE_ABI = parseAbi([
   'function hasAccess(uint256 policyId, address buyer) view returns (bool)',
   'function receiptOfPolicyAndBuyer(uint256 policyId, address buyer) view returns (uint256)',
-  'event AccessGranted(uint256 indexed policyId,uint256 indexed datasetId,uint256 indexed receiptTokenId,address buyer,address recipient,address paymentToken,uint256 price,uint64 purchasedAt,bytes32 ciphertextHash,bytes32 keyCommitment)',
+  'event AccessGranted(uint256 indexed policyId,uint256 indexed datasetId,uint256 indexed receiptTokenId,address buyer,address recipient,address paymentToken,uint256 price,uint64 purchasedAt,bool receiptTransferable,bytes32 ciphertextHash,bytes32 keyCommitment)',
 ]);
 
 const toLowerHex = (value: Hex): string => value.toLowerCase();
@@ -247,6 +250,7 @@ export class ProgrammableSecretsChainClient {
         priceWei: policy.price.toString(),
         createdAtUnix: Number(policy.createdAt),
         active: policy.active,
+        receiptTransferable: policy.receiptTransferable,
         ciphertextHash: toLowerHex(policy.ciphertextHash),
         keyCommitment: toLowerHex(policy.keyCommitment),
         metadataHash: toLowerHex(policy.metadataHash),
@@ -542,6 +546,7 @@ export class ProgrammableSecretsChainClient {
             payout: normalizeAddress(decoded.args.payout),
             paymentToken: normalizeAddress(decoded.args.paymentToken),
             priceWei: decoded.args.price.toString(),
+            receiptTransferable: decoded.args.receiptTransferable,
             conditionsHash: toLowerHex(decoded.args.conditionsHash),
             conditionCount: Number(decoded.args.conditionCount),
             metadataHash: toLowerHex(decoded.args.metadataHash),
@@ -591,6 +596,7 @@ export class ProgrammableSecretsChainClient {
             paymentToken: normalizeAddress(decoded.args.paymentToken),
             priceWei: decoded.args.price.toString(),
             purchasedAtUnix: Number(decoded.args.purchasedAt),
+            receiptTransferable: decoded.args.receiptTransferable,
             ciphertextHash: toLowerHex(decoded.args.ciphertextHash),
             keyCommitment: toLowerHex(decoded.args.keyCommitment),
             transactionHash: log.transactionHash.toLowerCase(),

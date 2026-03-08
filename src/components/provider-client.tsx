@@ -9,7 +9,11 @@ import { waitForTransactionReceipt } from 'viem/actions';
 import { createPublicClient, http } from 'viem';
 import { robinhoodTestnet, buildTxUrl } from '@/lib/contracts/chain';
 import { POLICY_VAULT_ABI, POLICY_VAULT_ADDRESS } from '@/lib/contracts/abi';
+import { getNetworkMeta } from '@/lib/contracts/networks';
+
+type PolicyTemplate = 'open' | 'uaid' | 'custom';
 import { broker } from '@/lib/api/broker';
+import { deriveWalletUaid } from '@/lib/uaid';
 import type { ProgrammableSecretsConditionDescriptor } from '@/lib/server/policy-conditions';
 import {
   generateAesKey,
@@ -87,16 +91,12 @@ function SummaryRow({
   );
 }
 
-function deriveUaid(address: string, chainId: number = 46630): string {
-  return `uaid:eip155:${chainId}:${address.toLowerCase()}`;
-}
-
 export function ProviderClient() {
   const { address, isConnected, chainId } = useAccount();
   const { data: walletClient } = useWalletClient();
 
   const providerUaid = useMemo(
-    () => (address ? deriveUaid(address, chainId ?? 46630) : ''),
+    () => (address ? deriveWalletUaid(address, chainId ?? robinhoodTestnet.id) : ''),
     [address, chainId],
   );
 
@@ -105,8 +105,14 @@ export function ProviderClient() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [priceEth, setPriceEth] = useState('0.00001');
+  const [receiptTransferable, setReceiptTransferable] = useState(false);
+  const [policyTemplate, setPolicyTemplate] = useState<PolicyTemplate>('open');
   const [conditionJson, setConditionJson] = useState('[]');
+  const [uaidRequiredBuyerUaid, setUaidRequiredBuyerUaid] = useState('');
+  const [uaidAgentId, setUaidAgentId] = useState('');
   const [showConditions, setShowConditions] = useState(false);
+
+  const connectedNetwork = useMemo(() => getNetworkMeta(chainId), [chainId]);
   const [customEvaluatorAddress, setCustomEvaluatorAddress] = useState('');
   const [customEvaluatorMetadataJson, setCustomEvaluatorMetadataJson] = useState('{\n  "name": "Custom Evaluator"\n}');
   const [evaluatorRegistrationFeeWei, setEvaluatorRegistrationFeeWei] = useState<string | null>(null);
@@ -294,6 +300,7 @@ export function ProviderClient() {
         createdAt: new Date().toISOString(),
         cipher: { algorithm: 'AES-GCM', ivBase64: bytesToBase64(encrypted.iv), version: 1 },
         purchaseRequirements: {
+          receiptTransferable,
           conditions,
         },
       };
@@ -342,6 +349,7 @@ export function ProviderClient() {
           getAddress(address),
           '0x0000000000000000000000000000000000000000' as `0x${string}`,
           BigInt(priceWei),
+          prepared.onchainInputs.receiptTransferable,
           prepared.onchainInputs.metadataHash as `0x${string}`,
           prepared.onchainInputs.conditions.map((condition) => ({
             evaluator: condition.evaluator,
@@ -357,7 +365,7 @@ export function ProviderClient() {
       const policyLog = policyReceipt.logs.find((log) => {
         try {
           return log.topics[0] === keccak256(
-            toBytes('PolicyCreated(uint256,uint256,address,address,address,uint256,bytes32,uint32,bytes32,bytes32)')
+            toBytes('PolicyCreated(uint256,uint256,address,address,address,uint256,bool,bytes32,uint32,bytes32,bytes32)')
           );
         } catch { return false; }
       });
@@ -378,7 +386,7 @@ export function ProviderClient() {
     } finally {
       setIsPublishing(false);
     }
-  }, [file, walletClient, address, title, description, priceEth, conditionJson, publicClient, providerUaid]);
+  }, [address, conditionJson, description, file, priceEth, providerUaid, publicClient, receiptTransferable, title, walletClient]);
 
   /* ───── Not Connected ───── */
   if (!isConnected) {
@@ -630,7 +638,7 @@ export function ProviderClient() {
                   Set Terms
                 </h2>
                 <p className="mt-1.5 text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-                  Define pricing. Optionally add evaluator-backed conditions for fine-grained access control.
+                  Define pricing and access policy. Choose who can purchase this dataset.
                 </p>
               </div>
 
@@ -646,69 +654,200 @@ export function ProviderClient() {
                 />
               </div>
 
-              {/* Conditions — collapsible */}
               <div
-                className="rounded-xl overflow-hidden"
-                style={{ border: '1px solid var(--border)' }}
+                className="rounded-xl p-4"
+                style={{ border: '1px solid var(--border)', background: 'var(--surface-0)' }}
               >
-                <button
-                  type="button"
-                  onClick={() => setShowConditions(!showConditions)}
-                  className="w-full flex items-center justify-between gap-2 px-4 py-3 text-left bg-transparent border-none cursor-pointer"
-                  style={{ background: 'var(--surface-0)' }}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
-                      Policy Conditions
-                    </span>
-                    {parsedConditionCount > 0 && (
-                      <span
-                        className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold"
-                        style={{
-                          background: 'rgba(85, 153, 254, 0.08)',
-                          color: 'var(--brand-blue)',
-                        }}
-                      >
-                        {parsedConditionCount} active
-                      </span>
-                    )}
+                <div className="flex items-start justify-between gap-4">
+                  <div className="space-y-1">
+                    <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                      Transferable receipt
+                    </p>
+                    <p className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+                      When enabled, the ERC-721 can move live access to another wallet. Leave this off to keep access bound to the original buyer.
+                    </p>
                   </div>
-                  <span
-                    className="text-xs transition-transform duration-200"
+                  <button
+                    type="button"
+                    onClick={() => setReceiptTransferable((current) => !current)}
+                    className="relative inline-flex h-7 w-12 shrink-0 rounded-full transition-colors"
                     style={{
-                      color: 'var(--text-tertiary)',
-                      transform: showConditions ? 'rotate(180deg)' : 'rotate(0)',
+                      background: receiptTransferable ? 'var(--brand-blue)' : 'var(--surface-3)',
                     }}
                   >
-                    ▼
-                  </span>
-                </button>
+                    <span
+                      className="absolute top-1 h-5 w-5 rounded-full transition-transform"
+                      style={{
+                        left: '4px',
+                        transform: receiptTransferable ? 'translateX(20px)' : 'translateX(0)',
+                        background: '#ffffff',
+                      }}
+                    />
+                  </button>
+                </div>
+              </div>
 
-                {showConditions && (
-                  <div className="px-4 pb-4 space-y-4" style={{ background: 'var(--surface-0)' }}>
-                    <div>
-                      <FieldLabel hint="JSON array">Condition Descriptors</FieldLabel>
-                      <textarea
-                        value={conditionJson}
-                        onChange={(e) => setConditionJson(e.target.value)}
-                        rows={6}
-                        className="input-field resize-y"
-                        placeholder={`[]\n\nor\n[\n  {\n    "kind": "custom-static",\n    "evaluatorAddress": "0x...",\n    "configDataHex": "0x...",\n    "runtimeWitness": { "kind": "none" }\n  }\n]`}
-                        style={{ fontFamily: 'var(--font-mono)', fontSize: '12px' }}
-                      />
-                      <p className="mt-1.5 text-[11px] leading-relaxed" style={{ color: 'var(--text-tertiary)' }}>
-                        Use <code className="font-semibold" style={{ color: 'var(--text-secondary)' }}>[]</code> for an
-                        open paid policy, or provide evaluator-backed descriptors for onchain conditions.
+              {/* P0 #4 — Policy Template Selector */}
+              <div>
+                <FieldLabel>Access Policy Type</FieldLabel>
+                <div className="grid gap-2 sm:grid-cols-3">
+                  {[
+                    {
+                      key: 'open' as PolicyTemplate,
+                      icon: '🌐',
+                      label: 'Open (Paid)',
+                      desc: 'Anyone can purchase',
+                      accent: 'var(--brand-green)',
+                    },
+                    {
+                      key: 'uaid' as PolicyTemplate,
+                      icon: '🤖',
+                      label: 'UAID / ERC-8004',
+                      desc: 'Agent identity gated',
+                      accent: 'var(--brand-blue)',
+                    },
+                    {
+                      key: 'custom' as PolicyTemplate,
+                      icon: '⚙️',
+                      label: 'Custom Evaluator',
+                      desc: 'Raw condition JSON',
+                      accent: 'var(--brand-purple)',
+                    },
+                  ].map((tpl) => (
+                    <button
+                      key={tpl.key}
+                      type="button"
+                      onClick={() => {
+                        setPolicyTemplate(tpl.key);
+                        if (tpl.key === 'open') setConditionJson('[]');
+                      }}
+                      className="text-left p-3 rounded-xl cursor-pointer transition-all duration-150"
+                      style={{
+                        border: policyTemplate === tpl.key
+                          ? `2px solid ${tpl.accent}`
+                          : '2px solid var(--border)',
+                        background: policyTemplate === tpl.key
+                          ? `${tpl.accent}08`
+                          : 'var(--surface-0)',
+                      }}
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-sm">{tpl.icon}</span>
+                        <span className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>
+                          {tpl.label}
+                        </span>
+                      </div>
+                      <p className="text-[10px]" style={{ color: 'var(--text-tertiary)' }}>
+                        {tpl.desc}
                       </p>
-                      {parsedConditionCount === -1 && (
-                        <p className="mt-1 text-[11px] font-semibold" style={{ color: 'var(--accent-red)' }}>
-                          ⚠ Invalid JSON — must be an array
-                        </p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* UAID Template Fields */}
+              {policyTemplate === 'uaid' && (
+                <div
+                  className="rounded-xl p-4 space-y-4"
+                  style={{ border: '1px solid rgba(85,153,254,0.15)', background: 'rgba(85,153,254,0.03)' }}
+                >
+                  <p className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+                    Agent-gated policy enforces three on-chain checks: non-empty UAID string, UAID hash match, and ERC-8004 IdentityRegistry ownership.
+                  </p>
+                  <div>
+                    <FieldLabel hint="uaid:...">Required Buyer UAID</FieldLabel>
+                    <input
+                      type="text"
+                      value={uaidRequiredBuyerUaid}
+                      onChange={(e) => setUaidRequiredBuyerUaid(e.target.value)}
+                      placeholder="uaid:did:eip155:421614:0x...;nativeId=eip155:421614:0x..."
+                      className="input-field"
+                      style={{ fontFamily: 'var(--font-mono)', fontSize: '12px' }}
+                    />
+                  </div>
+                  <div>
+                    <FieldLabel hint="ERC-8004 token ID">Agent ID</FieldLabel>
+                    <input
+                      type="text"
+                      value={uaidAgentId}
+                      onChange={(e) => setUaidAgentId(e.target.value)}
+                      placeholder="e.g. 97"
+                      className="input-field"
+                      style={{ fontFamily: 'var(--font-mono)', fontSize: '12px' }}
+                    />
+                  </div>
+                  <div className="flex items-center gap-2 text-[10px]" style={{ color: 'var(--text-tertiary)' }}>
+                    <span style={{ color: 'var(--brand-blue)' }}>ℹ</span>
+                    Identity Registry: <code style={{ color: 'var(--brand-blue)' }}>0x8004A818BFB912233c491871b3d84c89A494BD9e</code> (Arbitrum Sepolia)
+                  </div>
+                </div>
+              )}
+
+              {/* Custom template — raw conditions */}
+              {policyTemplate === 'custom' && (
+                <div
+                  className="rounded-xl overflow-hidden"
+                  style={{ border: '1px solid var(--border)' }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setShowConditions(!showConditions)}
+                    className="w-full flex items-center justify-between gap-2 px-4 py-3 text-left bg-transparent border-none cursor-pointer"
+                    style={{ background: 'var(--surface-0)' }}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                        Policy Conditions
+                      </span>
+                      {parsedConditionCount > 0 && (
+                        <span
+                          className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                          style={{
+                            background: 'rgba(85, 153, 254, 0.08)',
+                            color: 'var(--brand-blue)',
+                          }}
+                        >
+                          {parsedConditionCount} active
+                        </span>
                       )}
                     </div>
-                  </div>
-                )}
-              </div>
+                    <span
+                      className="text-xs transition-transform duration-200"
+                      style={{
+                        color: 'var(--text-tertiary)',
+                        transform: showConditions ? 'rotate(180deg)' : 'rotate(0)',
+                      }}
+                    >
+                      ▼
+                    </span>
+                  </button>
+
+                  {showConditions && (
+                    <div className="px-4 pb-4 space-y-4" style={{ background: 'var(--surface-0)' }}>
+                      <div>
+                        <FieldLabel hint="JSON array">Condition Descriptors</FieldLabel>
+                        <textarea
+                          value={conditionJson}
+                          onChange={(e) => setConditionJson(e.target.value)}
+                          rows={6}
+                          className="input-field resize-y"
+                          placeholder={`[]\n\nor\n[\n  {\n    "kind": "custom-static",\n    "evaluatorAddress": "0x...",\n    "configDataHex": "0x...",\n    "runtimeWitness": { "kind": "none" }\n  }\n]`}
+                          style={{ fontFamily: 'var(--font-mono)', fontSize: '12px' }}
+                        />
+                        <p className="mt-1.5 text-[11px] leading-relaxed" style={{ color: 'var(--text-tertiary)' }}>
+                          Use <code className="font-semibold" style={{ color: 'var(--text-secondary)' }}>[]</code> for an
+                          open paid policy, or provide evaluator-backed descriptors for onchain conditions.
+                        </p>
+                        {parsedConditionCount === -1 && (
+                          <p className="mt-1 text-[11px] font-semibold" style={{ color: 'var(--accent-red)' }}>
+                            ⚠ Invalid JSON — must be an array
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Evaluator registration — collapsible */}
               <div
@@ -839,15 +978,23 @@ export function ProviderClient() {
                   <SummaryRow label="File" value={file?.name ?? '—'} />
                   <SummaryRow label="Price" value={`${priceEth} ETH`} mono accent="var(--text-primary)" />
                   <SummaryRow
+                    label="Policy type"
+                    value={policyTemplate === 'open' ? 'Open (paid)' : policyTemplate === 'uaid' ? 'UAID / ERC-8004 gated' : 'Custom evaluator'}
+                    accent={policyTemplate === 'uaid' ? 'var(--brand-blue)' : undefined}
+                  />
+                  <SummaryRow
                     label="Conditions"
                     value={parsedConditionCount >= 0 ? String(parsedConditionCount) : 'invalid'}
                     accent={parsedConditionCount === -1 ? 'var(--accent-red)' : undefined}
                   />
+                  {policyTemplate === 'uaid' && uaidRequiredBuyerUaid && (
+                    <SummaryRow label="Required UAID" value={uaidRequiredBuyerUaid} mono truncate accent="var(--brand-blue)" />
+                  )}
                   {registeredEvaluatorState?.active && (
                     <SummaryRow label="Custom Evaluator" value="Registered" accent="var(--accent-green)" />
                   )}
                   <SummaryRow label="Identity" value={providerUaid} mono truncate accent="var(--brand-blue)" />
-                  <SummaryRow label="Settlement" value="Robinhood Chain Testnet" accent="var(--brand-blue)" />
+                  <SummaryRow label="Settlement" value={connectedNetwork.name} accent={connectedNetwork.color} />
                 </div>
               </div>
 

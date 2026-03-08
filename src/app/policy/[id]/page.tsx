@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useEffect, useMemo, useState } from 'react';
+import { use, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useAccount, useWalletClient } from 'wagmi';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
@@ -128,6 +128,455 @@ function encodeConditionRuntimeInput(
   return encodeAbiParameters(parseAbiParameters('string value'), [trimmed]);
 }
 
+function TrustEmbedSection({
+  embedUrl,
+  profileUrl,
+  addressSearchUrl,
+  providerUaid,
+}: {
+  embedUrl: string | null;
+  profileUrl: string | null;
+  addressSearchUrl: string;
+  providerUaid: string | null;
+}) {
+  const [embedState, setEmbedState] = useState<'checking' | 'ok' | 'unavailable'>(
+    embedUrl ? 'checking' : 'unavailable',
+  );
+
+  // Verify the embed URL is reachable server-side before rendering the iframe
+  useEffect(() => {
+    if (!embedUrl) {
+      return;
+    }
+    let cancelled = false;
+
+    fetch(`/api/ps/trust-check?url=${encodeURIComponent(embedUrl)}`)
+      .then(res => res.json())
+      .then(data => {
+        if (!cancelled) {
+          setEmbedState(data.ok ? 'ok' : 'unavailable');
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setEmbedState('unavailable');
+      });
+
+    return () => { cancelled = true; };
+  }, [embedUrl]);
+
+  // Fallback: no UAID, checking failed, or embed unavailable
+  if (!embedUrl || embedState === 'unavailable') {
+    const linkUrl = profileUrl ?? addressSearchUrl;
+    const linkText = profileUrl ? 'View agent profile on registry' : 'Search seller address in registry';
+    return (
+      <div
+        className="rounded-2xl p-5 text-sm flex items-center justify-between"
+        style={{ border: '1px solid var(--border)', background: 'var(--surface-1)', color: 'var(--text-secondary)' }}
+      >
+        <span>
+          {providerUaid
+            ? 'Trust score is currently unavailable for this seller.'
+            : 'Trust score is unavailable — seller has not linked a Registry Broker UAID.'}
+        </span>
+        <a
+          href={linkUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="text-xs font-semibold hover:underline whitespace-nowrap ml-4"
+          style={{ color: 'var(--brand-blue)' }}
+        >
+          {linkText} ↗
+        </a>
+      </div>
+    );
+  }
+
+  if (embedState === 'checking') {
+    return (
+      <div
+        className="rounded-2xl overflow-hidden"
+        style={{ border: '1px solid var(--border)', background: 'var(--surface-1)' }}
+      >
+        <div className="flex items-center justify-center py-10" style={{ color: 'var(--text-tertiary)' }}>
+          <span className="text-sm">Loading trust score…</span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="overflow-hidden rounded-2xl"
+      style={{ border: '1px solid var(--border)', background: 'var(--surface-1)' }}
+    >
+      <iframe
+        src={embedUrl}
+        title={`Trust and reputation for ${providerUaid}`}
+        loading="lazy"
+        className="w-full"
+        style={{ border: 'none', minHeight: 740, background: 'transparent' }}
+      />
+    </div>
+  );
+}
+
+/* ── DecryptedDataDisplay — structured JSON viewer ── */
+const SEVERITY_COLORS: Record<string, { bg: string; text: string; border: string }> = {
+  critical: { bg: 'rgba(239,68,68,0.08)', text: 'var(--accent-red)', border: 'rgba(239,68,68,0.2)' },
+  high: { bg: 'rgba(245,158,11,0.08)', text: 'var(--accent-amber)', border: 'rgba(245,158,11,0.2)' },
+  medium: { bg: 'rgba(85,153,254,0.08)', text: 'var(--brand-blue)', border: 'rgba(85,153,254,0.2)' },
+  low: { bg: 'rgba(72,223,123,0.08)', text: 'var(--brand-green)', border: 'rgba(72,223,123,0.2)' },
+  info: { bg: 'rgba(181,108,255,0.08)', text: 'var(--brand-purple)', border: 'rgba(181,108,255,0.2)' },
+};
+
+const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
+  fixed: { bg: 'rgba(34,197,94,0.1)', text: 'var(--accent-green)' },
+  resolved: { bg: 'rgba(34,197,94,0.1)', text: 'var(--accent-green)' },
+  acknowledged: { bg: 'rgba(85,153,254,0.1)', text: 'var(--brand-blue)' },
+  open: { bg: 'rgba(245,158,11,0.1)', text: 'var(--accent-amber)' },
+  pending: { bg: 'rgba(245,158,11,0.1)', text: 'var(--accent-amber)' },
+  closed: { bg: 'rgba(107,114,128,0.1)', text: 'var(--text-tertiary)' },
+};
+
+function humanizeKey(key: string): string {
+  return key
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function isIsoDate(value: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}(T|\s)/.test(value);
+}
+
+function isHexLike(value: string): boolean {
+  return /^0x[0-9a-fA-F]{8,}$/.test(value);
+}
+
+function SeverityBadge({ severity }: { severity: string }) {
+  const key = severity.toLowerCase();
+  const colors = SEVERITY_COLORS[key] ?? { bg: 'var(--surface-3)', text: 'var(--text-secondary)', border: 'var(--border)' };
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider"
+      style={{ background: colors.bg, color: colors.text, border: `1px solid ${colors.border}` }}
+    >
+      <span className="h-1.5 w-1.5 rounded-full" style={{ background: colors.text }} />
+      {severity}
+    </span>
+  );
+}
+
+function StatusBadgeLocal({ status }: { status: string }) {
+  const key = status.toLowerCase();
+  const colors = STATUS_COLORS[key] ?? { bg: 'var(--surface-3)', text: 'var(--text-secondary)' };
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider"
+      style={{ background: colors.bg, color: colors.text }}
+    >
+      {(key === 'fixed' || key === 'resolved') && (
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+      )}
+      {status}
+    </span>
+  );
+}
+
+function ScalarValue({ value }: { value: unknown }) {
+  if (value === null || value === undefined) {
+    return <span className="text-xs italic" style={{ color: 'var(--text-tertiary)' }}>null</span>;
+  }
+  if (typeof value === 'boolean') {
+    return (
+      <span
+        className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold"
+        style={{
+          background: value ? 'rgba(34,197,94,0.08)' : 'rgba(239,68,68,0.08)',
+          color: value ? 'var(--accent-green)' : 'var(--accent-red)',
+        }}
+      >
+        {value ? '✓ true' : '✗ false'}
+      </span>
+    );
+  }
+  if (typeof value === 'number') {
+    return (
+      <span className="text-sm font-semibold tabular-nums" style={{ color: 'var(--brand-blue)', fontFamily: 'var(--font-mono)' }}>
+        {value.toLocaleString()}
+      </span>
+    );
+  }
+  const str = String(value);
+  if (isHexLike(str)) {
+    return (
+      <span className="text-xs truncate max-w-[240px] inline-block align-bottom" style={{ color: 'var(--brand-purple)', fontFamily: 'var(--font-mono)' }} title={str}>
+        {str.length > 20 ? `${str.slice(0, 10)}…${str.slice(-8)}` : str}
+      </span>
+    );
+  }
+  if (isIsoDate(str)) {
+    const d = new Date(str);
+    if (!Number.isNaN(d.getTime())) {
+      return (
+        <span className="text-sm" style={{ color: 'var(--text-primary)' }}>
+          {d.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}
+        </span>
+      );
+    }
+  }
+  return <span className="text-sm" style={{ color: 'var(--text-primary)' }}>{str}</span>;
+}
+
+function StructuredRow({ label, value }: { label: string; value: unknown }) {
+  const lowerLabel = label.toLowerCase();
+  if (lowerLabel === 'severity' && typeof value === 'string') {
+    return (
+      <div className="flex items-center justify-between gap-4 py-2.5 px-1" style={{ borderBottom: '1px solid var(--border)' }}>
+        <span className="text-xs font-semibold shrink-0" style={{ color: 'var(--text-tertiary)' }}>{humanizeKey(label)}</span>
+        <SeverityBadge severity={value} />
+      </div>
+    );
+  }
+  if (lowerLabel === 'status' && typeof value === 'string') {
+    return (
+      <div className="flex items-center justify-between gap-4 py-2.5 px-1" style={{ borderBottom: '1px solid var(--border)' }}>
+        <span className="text-xs font-semibold shrink-0" style={{ color: 'var(--text-tertiary)' }}>{humanizeKey(label)}</span>
+        <StatusBadgeLocal status={value} />
+      </div>
+    );
+  }
+  if (typeof value === 'object' && value !== null) return null; // handled separately
+  return (
+    <div className="flex items-center justify-between gap-4 py-2.5 px-1" style={{ borderBottom: '1px solid var(--border)' }}>
+      <span className="text-xs font-semibold shrink-0" style={{ color: 'var(--text-tertiary)' }}>{humanizeKey(label)}</span>
+      <div className="text-right min-w-0"><ScalarValue value={value} /></div>
+    </div>
+  );
+}
+
+function ObjectCard({ data, accent }: { data: Record<string, unknown>; accent?: string }) {
+  const heading = (data.title ?? data.name ?? data.id ?? data.label) as string | undefined;
+  const severity = data.severity as string | undefined;
+  const status = data.status as string | undefined;
+  const sevColors = severity ? (SEVERITY_COLORS[severity.toLowerCase()] ?? null) : null;
+  const borderColor = sevColors?.border ?? (accent ? `${accent}33` : 'var(--border)');
+
+  return (
+    <div
+      className="rounded-xl p-4 transition-all duration-200 hover:shadow-md"
+      style={{ border: `1px solid ${borderColor}`, background: sevColors?.bg ?? 'var(--surface-1)' }}
+    >
+      {/* Card header: title + badges */}
+      {(heading || severity || status) && (
+        <div className="flex flex-wrap items-center gap-2 mb-3 pb-3" style={{ borderBottom: '1px solid var(--border)' }}>
+          {heading && (
+            <span className="text-sm font-bold flex-1 min-w-0" style={{ color: 'var(--text-primary)' }}>
+              {String(heading)}
+            </span>
+          )}
+          {severity && <SeverityBadge severity={severity} />}
+          {status && <StatusBadgeLocal status={status} />}
+        </div>
+      )}
+      {/* Remaining fields */}
+      <div className="space-y-0">
+        {Object.entries(data)
+          .filter(([k]) => !['title', 'name', 'severity', 'status'].includes(k) || (!heading && k !== 'severity' && k !== 'status'))
+          .map(([key, val]) => {
+            if (typeof val === 'object' && val !== null && !Array.isArray(val)) {
+              return (
+                <div key={key} className="py-2.5 px-1" style={{ borderBottom: '1px solid var(--border)' }}>
+                  <span className="text-xs font-semibold block mb-2" style={{ color: 'var(--text-tertiary)' }}>{humanizeKey(key)}</span>
+                  <div className="pl-3" style={{ borderLeft: '2px solid var(--border-hover)' }}>
+                    {Object.entries(val as Record<string, unknown>).map(([sk, sv]) => (
+                      <StructuredRow key={sk} label={sk} value={sv} />
+                    ))}
+                  </div>
+                </div>
+              );
+            }
+            return <StructuredRow key={key} label={key} value={val} />;
+          })}
+      </div>
+    </div>
+  );
+}
+
+function DecryptedDataDisplay({ plaintext }: { plaintext: string }) {
+  const [showRaw, setShowRaw] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  let parsed: unknown = null;
+  let isJson = false;
+  let formatted = plaintext;
+  try {
+    parsed = JSON.parse(plaintext);
+    isJson = typeof parsed === 'object' && parsed !== null;
+    formatted = JSON.stringify(parsed, null, 2);
+  } catch { /* not JSON */ }
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(formatted);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  // Render structured view for JSON objects
+  const renderStructured = () => {
+    if (!isJson || !parsed) return null;
+    const obj = parsed as Record<string, unknown>;
+
+    return (
+      <div className="space-y-4">
+        {Object.entries(obj).map(([key, value]) => {
+          // Array of objects → list of cards
+          if (Array.isArray(value) && value.length > 0 && typeof value[0] === 'object' && value[0] !== null) {
+            return (
+              <div key={key}>
+                <div className="flex items-center gap-2 mb-3">
+                  <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4" stroke="currentColor" strokeWidth={2} style={{ color: 'var(--brand-blue)' }}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                  </svg>
+                  <span className="text-xs font-bold uppercase tracking-[0.1em]" style={{ color: 'var(--text-tertiary)' }}>
+                    {humanizeKey(key)}
+                  </span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: 'var(--surface-3)', color: 'var(--text-tertiary)' }}>
+                    {value.length}
+                  </span>
+                </div>
+                <div className="space-y-3">
+                  {value.map((item, i) => (
+                    <ObjectCard key={i} data={item as Record<string, unknown>} />
+                  ))}
+                </div>
+              </div>
+            );
+          }
+
+          // Nested object → section card
+          if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+            return (
+              <div key={key}>
+                <div className="flex items-center gap-2 mb-3">
+                  <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4" stroke="currentColor" strokeWidth={2} style={{ color: 'var(--brand-purple)' }}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 7v10c0 2 1 3 3 3h10c2 0 3-1 3-3V7c0-2-1-3-3-3H7C5 4 4 5 4 7z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6M12 9v6" />
+                  </svg>
+                  <span className="text-xs font-bold uppercase tracking-[0.1em]" style={{ color: 'var(--text-tertiary)' }}>
+                    {humanizeKey(key)}
+                  </span>
+                </div>
+                <div className="rounded-xl p-4" style={{ border: '1px solid var(--border)', background: 'var(--surface-1)' }}>
+                  {Object.entries(value as Record<string, unknown>).map(([sk, sv]) => {
+                    if (Array.isArray(sv) && sv.length > 0 && typeof sv[0] === 'object') {
+                      return (
+                        <div key={sk} className="py-2">
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-tertiary)' }}>
+                              {humanizeKey(sk)}
+                            </span>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: 'var(--surface-3)', color: 'var(--text-tertiary)' }}>
+                              {sv.length}
+                            </span>
+                          </div>
+                          <div className="space-y-3">
+                            {sv.map((item, i) => (
+                              <ObjectCard key={i} data={item as Record<string, unknown>} />
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    }
+                    return <StructuredRow key={sk} label={sk} value={sv} />;
+                  })}
+                </div>
+              </div>
+            );
+          }
+
+          // Scalar value → simple row
+          return (
+            <div key={key} className="flex items-center justify-between gap-4 py-2 px-1" style={{ borderBottom: '1px solid var(--border)' }}>
+              <span className="text-xs font-semibold shrink-0" style={{ color: 'var(--text-tertiary)' }}>{humanizeKey(key)}</span>
+              <div className="text-right min-w-0"><ScalarValue value={value} /></div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  return (
+    <div className="relative space-y-3">
+      {/* Header bar */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4" stroke="currentColor" strokeWidth={2} style={{ color: 'var(--brand-blue)' }}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+          </svg>
+          <span className="text-xs font-bold uppercase tracking-[0.1em]" style={{ color: 'var(--text-tertiary)' }}>
+            Decrypted Data
+          </span>
+        </div>
+        <div className="flex items-center gap-1">
+          {isJson && (
+            <button
+              type="button"
+              onClick={() => setShowRaw((r) => !r)}
+              className="btn-ghost text-xs"
+              style={{ color: showRaw ? 'var(--brand-blue)' : 'var(--text-tertiary)' }}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="16 18 22 12 16 6" /><polyline points="8 6 2 12 8 18" />
+              </svg>
+              {showRaw ? 'Structured' : 'Raw JSON'}
+            </button>
+          )}
+          <button type="button" onClick={handleCopy} className="btn-ghost text-xs">
+            {copied ? (
+              <>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--accent-green)' }}><polyline points="20 6 9 17 4 12" /></svg>
+                Copied
+              </>
+            ) : (
+              <>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2" /><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" /></svg>
+                Copy
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* Content */}
+      {isJson && !showRaw ? (
+        <div
+          className="rounded-xl p-5 max-h-[600px] overflow-auto"
+          style={{ border: '1px solid var(--border)', background: 'var(--surface-1)' }}
+        >
+          {renderStructured()}
+        </div>
+      ) : (
+        <pre
+          className="max-h-[500px] overflow-auto rounded-xl p-5 text-sm leading-relaxed"
+          style={{
+            border: '1px solid var(--border)',
+            background: 'var(--surface-1)',
+            color: 'var(--text-primary)',
+            fontFamily: 'var(--font-mono)',
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-word',
+          }}
+        >
+          <code>{formatted}</code>
+        </pre>
+      )}
+    </div>
+  );
+}
+
+
 export default function PolicyDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const policyId = Number(id);
@@ -140,6 +589,7 @@ export default function PolicyDetailPage({ params }: { params: Promise<{ id: str
   const [decryptedResult, setDecryptedResult] = useState<DecryptedResult | null>(null);
   const [showProof, setShowProof] = useState(false);
   const [conditionInputs, setConditionInputs] = useState<Record<number, string>>({});
+  const decryptedRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     return () => {
@@ -355,6 +805,10 @@ export default function PolicyDetailPage({ params }: { params: Promise<{ id: str
     onSuccess: (result) => {
       setDecryptedResult(result);
       queryClient.invalidateQueries({ queryKey: ['ps-policy'] });
+      // Auto-scroll to the decrypted data after a brief render delay
+      setTimeout(() => {
+        decryptedRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 150);
     },
     onError: (e) => {
       const msg = e instanceof Error ? e.message : 'Decryption failed';
@@ -373,7 +827,7 @@ export default function PolicyDetailPage({ params }: { params: Promise<{ id: str
   if (policyQuery.isLoading) {
     return (
       <div className="min-h-screen" style={{ background: 'var(--surface-0)' }}>
-        <div className="mx-auto max-w-5xl px-6 py-12">
+        <div className="mx-auto max-w-7xl px-6 py-12">
           <div className="space-y-6">
             <div className="skeleton h-4 w-32" />
             <div className="skeleton h-8 w-80" />
@@ -422,14 +876,14 @@ export default function PolicyDetailPage({ params }: { params: Promise<{ id: str
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--surface-0)' }}>
-      <div className="mx-auto max-w-5xl px-6 py-12">
+      <div className="mx-auto max-w-7xl px-6 py-12">
         <nav className="mb-8 flex items-center gap-2 text-sm" style={{ color: 'var(--text-tertiary)' }}>
           <Link href="/" className="hover:underline" style={{ color: 'var(--text-secondary)' }}>Marketplace</Link>
           <span>/</span>
           <span style={{ color: 'var(--text-primary)' }}>{title}</span>
         </nav>
 
-        <div className="grid gap-8 lg:grid-cols-[1fr_380px]">
+        <div className="grid gap-10 lg:grid-cols-[1fr_420px]">
           <div className="space-y-8 stagger">
             <div className="space-y-4">
               <div className="flex flex-wrap items-center gap-2">
@@ -466,15 +920,51 @@ export default function PolicyDetailPage({ params }: { params: Promise<{ id: str
                   {policy.providerUaid ? (policy.providerUaid.length > 28 ? `${policy.providerUaid.slice(0, 28)}…` : policy.providerUaid) : 'Anonymous provider'}
                 </span>
               </div>
-              <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+              <p className="text-xs leading-relaxed" style={{ color: 'var(--text-tertiary)' }}>
                 {networkStory}
               </p>
             </div>
 
             <div>
               <h2 className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--text-tertiary)', letterSpacing: '0.08em' }}>About</h2>
-              <p className="leading-relaxed" style={{ color: 'var(--text-secondary)' }}>{description}</p>
+              <p className="leading-relaxed text-[15px]" style={{ color: 'var(--text-secondary)' }}>{description}</p>
             </div>
+
+            {/* ── Decrypted data — shown immediately after About when available ── */}
+            {decryptedResult && (
+              <div ref={decryptedRef} className="space-y-4" style={{ scrollMarginTop: '2rem' }}>
+                <div className="surface-card-static p-5 space-y-4" style={{ borderColor: 'rgba(34,197,94,0.25)', boxShadow: '0 0 0 1px rgba(34,197,94,0.08), 0 4px 20px rgba(34,197,94,0.06)' }}>
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center justify-center h-10 w-10 rounded-full" style={{ background: 'rgba(34,197,94,0.1)' }}>
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--accent-green)' }}><polyline points="20 6 9 17 4 12" /></svg>
+                    </div>
+                    <div>
+                      <h3 className="text-base font-semibold">Decrypted Successfully</h3>
+                      <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>Integrity verified — plaintext hash matches on-chain commitment</p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2 text-xs">
+                    <span className="tag-subtle" style={{ background: 'rgba(34,197,94,0.1)', color: 'var(--accent-green)' }}>✓ Key issued</span>
+                    <span className="tag-subtle" style={{ background: 'rgba(34,197,94,0.1)', color: 'var(--accent-green)' }}>✓ Hash verified</span>
+                    <span className="tag-subtle">{decryptedResult.mimeType}</span>
+                    <span className="tag-subtle">{decryptedResult.fileName}</span>
+                  </div>
+                  <div className="rounded-lg p-2.5 flex items-center gap-2 text-xs" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
+                    <span className="font-semibold shrink-0" style={{ color: 'var(--text-tertiary)', fontFamily: 'var(--font-mono)' }}>SHA-256:</span>
+                    <span className="truncate" style={{ color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontSize: '11px' }} title={decryptedResult.plaintextHash}>{decryptedResult.plaintextHash}</span>
+                  </div>
+                </div>
+
+                {decryptedResult.plaintext ? (
+                  <DecryptedDataDisplay plaintext={decryptedResult.plaintext} />
+                ) : decryptedResult.downloadUrl ? (
+                  <a href={decryptedResult.downloadUrl} download={decryptedResult.fileName} className="btn-primary no-underline inline-flex items-center gap-2">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
+                    Download {decryptedResult.fileName}
+                  </a>
+                ) : null}
+              </div>
+            )}
 
             <div>
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -503,27 +993,12 @@ export default function PolicyDetailPage({ params }: { params: Promise<{ id: str
                   </a>
                 )}
               </div>
-              {providerTrustEmbedUrl ? (
-                <div
-                  className="overflow-hidden rounded-2xl"
-                  style={{ border: '1px solid var(--border)', background: 'var(--surface-1)' }}
-                >
-                  <iframe
-                    src={providerTrustEmbedUrl}
-                    title={`Trust and reputation for ${providerUaid}`}
-                    loading="lazy"
-                    className="w-full"
-                    style={{ border: 'none', minHeight: 740, background: 'transparent' }}
-                  />
-                </div>
-              ) : (
-                <div
-                  className="rounded-2xl p-4 text-sm"
-                  style={{ border: '1px solid var(--border)', background: 'var(--surface-1)', color: 'var(--text-secondary)' }}
-                >
-                  Trust score is unavailable because this seller has not linked a Registry Broker UAID to the policy yet.
-                </div>
-              )}
+              <TrustEmbedSection
+                embedUrl={providerTrustEmbedUrl}
+                profileUrl={providerProfileUrl}
+                addressSearchUrl={providerAddressSearchUrl}
+                providerUaid={providerUaid}
+              />
             </div>
 
             <div>
@@ -534,6 +1009,9 @@ export default function PolicyDetailPage({ params }: { params: Promise<{ id: str
                 <span className="tag-subtle">AES-256-GCM</span>
                 <span className="tag-subtle">{conditionCount} condition{conditionCount === 1 ? '' : 's'}</span>
                 <span className="tag-subtle">{evaluatorCount} evaluator{evaluatorCount === 1 ? '' : 's'}</span>
+                <span className="tag-subtle">
+                  {policy?.receiptTransferable ? 'Transferable receipt' : 'Buyer-bound receipt'}
+                </span>
               </div>
             </div>
 
@@ -543,10 +1021,12 @@ export default function PolicyDetailPage({ params }: { params: Promise<{ id: str
               <div className="rounded-xl p-4 space-y-3" style={{ border: '1px solid var(--border)', background: 'var(--surface-1)' }}>
                 {[
                   {
-                    icon: '🔒',
-                    label: 'Non-Transferable',
-                    desc: 'Receipt is an ERC-721 but transfers are blocked by design (ReceiptNonTransferable revert). Prevents resale and secondary-market leakage.',
-                    color: 'var(--accent-red)',
+                    icon: policy?.receiptTransferable ? '🔄' : '🔒',
+                    label: policy?.receiptTransferable ? 'Transferable' : 'Buyer-Bound',
+                    desc: policy?.receiptTransferable
+                      ? 'This policy mints a transferable ERC-721. Moving the token moves live access to the new holder.'
+                      : 'This policy mints a buyer-bound ERC-721. Transfers revert, so live access stays with the original buyer wallet.',
+                    color: policy?.receiptTransferable ? 'var(--brand-blue)' : 'var(--accent-red)',
                   },
                   {
                     icon: '⛓️',
@@ -670,51 +1150,7 @@ export default function PolicyDetailPage({ params }: { params: Promise<{ id: str
               )}
             </div>
 
-            {decryptedResult && (
-              <div className="space-y-4">
-                <div className="surface-card-static p-5 space-y-4" style={{ borderColor: 'rgba(34,197,94,0.2)' }}>
-                  <div className="flex items-center gap-3">
-                    <div className="flex items-center justify-center h-8 w-8 rounded-full" style={{ background: 'rgba(34,197,94,0.1)' }}>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--accent-green)' }}><polyline points="20 6 9 17 4 12" /></svg>
-                    </div>
-                    <div>
-                      <h3 className="text-sm font-semibold">Decrypted Successfully</h3>
-                      <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>Integrity verified — plaintext hash matches on-chain commitment</p>
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap gap-2 text-xs">
-                    <span className="tag-subtle" style={{ background: 'rgba(34,197,94,0.1)', color: 'var(--accent-green)' }}>✓ Key issued</span>
-                    <span className="tag-subtle" style={{ background: 'rgba(34,197,94,0.1)', color: 'var(--accent-green)' }}>✓ Hash verified</span>
-                    <span className="tag-subtle">{decryptedResult.mimeType}</span>
-                    <span className="tag-subtle">{decryptedResult.fileName}</span>
-                  </div>
-                  <div className="rounded-lg p-2.5 flex items-center gap-2 text-xs" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
-                    <span className="font-semibold shrink-0" style={{ color: 'var(--text-tertiary)', fontFamily: 'var(--font-mono)' }}>SHA-256:</span>
-                    <span className="truncate" style={{ color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontSize: '11px' }} title={decryptedResult.plaintextHash}>{decryptedResult.plaintextHash}</span>
-                  </div>
-                </div>
 
-                {decryptedResult.plaintext ? (
-                  <div className="relative">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-tertiary)', letterSpacing: '0.08em' }}>Decrypted Data</span>
-                      <button type="button" onClick={() => navigator.clipboard.writeText((() => { try { return JSON.stringify(JSON.parse(decryptedResult.plaintext!), null, 2); } catch { return decryptedResult.plaintext!; } })())} className="btn-ghost text-xs">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2" /><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" /></svg>
-                        Copy
-                      </button>
-                    </div>
-                    <pre className="max-h-[500px] overflow-auto rounded-xl p-5 text-sm leading-relaxed" style={{ border: '1px solid var(--border)', background: 'var(--surface-1)', color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                      <code>{(() => { try { return JSON.stringify(JSON.parse(decryptedResult.plaintext), null, 2); } catch { return decryptedResult.plaintext; } })()}</code>
-                    </pre>
-                  </div>
-                ) : decryptedResult.downloadUrl ? (
-                  <a href={decryptedResult.downloadUrl} download={decryptedResult.fileName} className="btn-primary no-underline inline-flex items-center gap-2">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
-                    Download {decryptedResult.fileName}
-                  </a>
-                ) : null}
-              </div>
-            )}
           </div>
 
           {/* ── Right — Action Panel ── */}
@@ -907,10 +1343,15 @@ export default function PolicyDetailPage({ params }: { params: Promise<{ id: str
                 )}
 
                 {decryptedResult && (
-                  <div className="rounded-xl p-3 flex items-center gap-2" style={{ border: '1px solid rgba(34,197,94,0.2)', background: 'rgba(34,197,94,0.04)' }}>
+                  <button
+                    type="button"
+                    onClick={() => decryptedRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                    className="w-full rounded-xl p-3 flex items-center justify-center gap-2 cursor-pointer transition-colors"
+                    style={{ border: '1px solid rgba(34,197,94,0.25)', background: 'rgba(34,197,94,0.06)' }}
+                  >
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--accent-green)', flexShrink: 0 }}><polyline points="20 6 9 17 4 12" /></svg>
-                    <span className="text-xs font-semibold" style={{ color: 'var(--accent-green)' }}>Data decrypted — scroll down to view</span>
-                  </div>
+                    <span className="text-xs font-semibold" style={{ color: 'var(--accent-green)' }}>View Decrypted Data ↑</span>
+                  </button>
                 )}
               </div>
               )}

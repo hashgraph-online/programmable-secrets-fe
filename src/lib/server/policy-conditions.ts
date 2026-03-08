@@ -72,6 +72,7 @@ interface ConditionPreparationResult {
   conditions: PreparedProgrammableSecretsCondition[];
   expiresAtUnix: number | null;
   allowlistEnabled: boolean;
+  receiptTransferable: boolean;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -327,14 +328,21 @@ function parseConditionDescriptor(value: unknown): ProgrammableSecretsConditionD
 
 export function parseMetadataPurchaseRequirements(
   metadata: ProgrammableSecretCanonicalMetadata,
-): { conditions: ProgrammableSecretsConditionDescriptor[] } {
+): {
+  conditions: ProgrammableSecretsConditionDescriptor[];
+  receiptTransferable: boolean;
+} {
   if (!isRecord(metadata.purchaseRequirements)) {
-    return { conditions: [] };
+    return { conditions: [], receiptTransferable: false };
   }
 
+  const receiptTransferable =
+    typeof metadata.purchaseRequirements.receiptTransferable === 'boolean'
+      ? metadata.purchaseRequirements.receiptTransferable
+      : false;
   const conditions = metadata.purchaseRequirements.conditions;
   if (conditions === undefined) {
-    return { conditions: [] };
+    return { conditions: [], receiptTransferable };
   }
   if (!Array.isArray(conditions)) {
     throw new Error('purchaseRequirements.conditions must be an array');
@@ -342,6 +350,7 @@ export function parseMetadataPurchaseRequirements(
 
   return {
     conditions: conditions.map((entry) => parseConditionDescriptor(entry)),
+    receiptTransferable,
   };
 }
 
@@ -349,7 +358,8 @@ export function buildPreparedConditions(params: {
   metadata: ProgrammableSecretCanonicalMetadata;
   target: ProgrammableSecretsChainTarget;
 }): ConditionPreparationResult {
-  const descriptors = parseMetadataPurchaseRequirements(params.metadata).conditions;
+  const purchaseRequirements = parseMetadataPurchaseRequirements(params.metadata);
+  const descriptors = purchaseRequirements.conditions;
   const conditions = descriptors.map((descriptor) => {
     const evaluatorAddress = resolveConfiguredEvaluatorAddress(descriptor, params.target);
     const configDataHex =
@@ -386,6 +396,7 @@ export function buildPreparedConditions(params: {
     conditions,
     expiresAtUnix: timeRangeCondition?.notAfterUnix ?? null,
     allowlistEnabled: descriptors.some((descriptor) => descriptor.kind === 'evm-allowlist'),
+    receiptTransferable: purchaseRequirements.receiptTransferable,
   };
 }
 

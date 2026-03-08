@@ -1,0 +1,1 @@
+ALTER TABLE "hol"."programmable_secret_policies" ADD COLUMN "receipt_transferable" boolean DEFAULT false NOT NULL;

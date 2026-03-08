@@ -33,6 +33,7 @@ export interface CreateStagedProgrammableSecretPolicyInput {
   expiresAtUnix?: number | null;
   active?: boolean;
   allowlistEnabled?: boolean;
+  receiptTransferable?: boolean;
   ciphertextHash: string;
   keyCommitment: string;
   metadataHash: string;
@@ -73,6 +74,7 @@ export interface UpsertIndexedProgrammableSecretPolicyInput {
   expiresAtUnix?: number | null;
   active: boolean;
   allowlistEnabled: boolean;
+  receiptTransferable: boolean;
   ciphertextHash: string;
   keyCommitment: string;
   metadataHash: string;
@@ -154,6 +156,7 @@ export class ProgrammableSecretPolicyPgRepository {
         expiresAtUnix: input.expiresAtUnix ?? null,
         active: input.active ?? true,
         allowlistEnabled: input.allowlistEnabled ?? false,
+        receiptTransferable: input.receiptTransferable ?? false,
         ciphertextHash: normalizeRequiredString(
           input.ciphertextHash,
           'ciphertextHash',
@@ -391,6 +394,7 @@ export class ProgrammableSecretPolicyPgRepository {
       expiresAtUnix: input.expiresAtUnix ?? null,
       active: input.active,
       allowlistEnabled: input.allowlistEnabled,
+      receiptTransferable: input.receiptTransferable,
       ciphertextHash: normalizeRequiredString(
         input.ciphertextHash,
         'ciphertextHash',
@@ -470,6 +474,7 @@ export class ProgrammableSecretPolicyPgRepository {
         expiresAtUnix: input.expiresAtUnix ?? null,
         active: input.active,
         allowlistEnabled: input.allowlistEnabled,
+        receiptTransferable: input.receiptTransferable,
         ciphertextHash: normalizeRequiredString(
           input.ciphertextHash,
           'ciphertextHash',

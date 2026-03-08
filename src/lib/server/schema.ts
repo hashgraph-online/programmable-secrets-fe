@@ -35,6 +35,7 @@ export const holProgrammableSecretPolicies = holProgrammableSecrets.table(
     expiresAtUnix: bigint('expires_at_unix', { mode: 'number' }),
     active: boolean('active').notNull().default(true),
     allowlistEnabled: boolean('allowlist_enabled').notNull().default(false),
+    receiptTransferable: boolean('receipt_transferable').notNull().default(false),
     ciphertextHash: text('ciphertext_hash').notNull(),
     keyCommitment: text('key_commitment').notNull(),
     metadataHash: text('metadata_hash').notNull(),

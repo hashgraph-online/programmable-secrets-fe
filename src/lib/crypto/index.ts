@@ -191,6 +191,7 @@ export interface PolicyMetadata {
   createdAt: string;
   cipher: { algorithm: 'AES-GCM'; ivBase64: string; version: 1 };
   purchaseRequirements?: {
+    receiptTransferable?: boolean;
     conditions?: unknown[];
   };
 }

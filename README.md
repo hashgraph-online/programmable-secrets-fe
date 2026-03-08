@@ -19,11 +19,28 @@ This app exposes:
 - Base URL: [https://ps.hol.org](https://ps.hol.org)
 - Agent onboarding route: [https://ps.hol.org/agents](https://ps.hol.org/agents)
 
+## Live Subgraphs
+
+- Robinhood query endpoint: `https://ps-subgraph.hol.org/subgraphs/name/programmable-secrets-robinhood`
+- Arbitrum query endpoint: `https://ps-subgraph.hol.org/subgraphs/name/programmable-secrets-arbitrum`
+
+DNS record for the new subgraph host:
+- Host: `ps-subgraph.hol.org`
+- Target ingress IP: `134.199.242.153`
+- Record type: `A`
+
+Quick query verification:
+
+```bash
+node -e "fetch('https://ps-subgraph.hol.org/subgraphs/name/programmable-secrets-robinhood',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({query:'{ _meta { block { number } } datasets(first:1){id datasetId} }'})}).then(async r=>{console.log(r.status);console.log(await r.text());});"
+```
+
 ## Product Story
 
 - Primary chain path: Robinhood Chain testnet for the core financial data marketplace flow.
 - Secondary chain path: Arbitrum Sepolia for ERC-8004 / UAID-gated policy validation.
 - The frontend demonstrates purchase and unlock UX while the contract deployments and manifests remain the source of truth for addresses and policy semantics.
+- Providers can now choose whether a policy mints buyer-bound receipts or transferable receipts. That flag is stored in policy metadata, persisted in the app database, and confirmed against the onchain `PolicyCreated` state before the policy is finalized.
 
 ## Route Map
 
