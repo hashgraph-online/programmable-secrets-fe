@@ -53,6 +53,40 @@ interface DecryptedResult {
   plaintextHash: string;
 }
 
+const DEFAULT_REGISTRY_ORIGIN = 'https://hol.org';
+
+function resolveRegistryOrigin(): string {
+  const configured = process.env.NEXT_PUBLIC_REGISTRY_ORIGIN;
+  const value =
+    typeof configured === 'string' && configured.trim().length > 0
+      ? configured.trim()
+      : DEFAULT_REGISTRY_ORIGIN;
+  return value.replace(/\/+$/, '');
+}
+
+function normalizeUaid(value: string | null | undefined): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (!trimmed.toLowerCase().startsWith('uaid:')) {
+    return null;
+  }
+  return trimmed;
+}
+
+function buildRegistryAgentProfileUrl(uaid: string): string {
+  return `${resolveRegistryOrigin()}/registry/agent/${encodeURIComponent(uaid)}`;
+}
+
+function buildRegistryTrustEmbedUrl(uaid: string): string {
+  return `${buildRegistryAgentProfileUrl(uaid)}/trust/embed`;
+}
+
+function buildRegistryAddressSearchUrl(address: string): string {
+  return `${resolveRegistryOrigin()}/registry/search?q=${encodeURIComponent(address)}`;
+}
+
 function formatFileSize(bytes: number | undefined): string {
   if (!bytes || bytes <= 0) return '';
   if (bytes < 1024) return `${bytes} B`;
@@ -113,6 +147,18 @@ export default function PolicyDetailPage({ params }: { params: Promise<{ id: str
     };
   }, [decryptedResult?.downloadUrl]);
 
+  useEffect(() => {
+    setPurchaseTxHash(null);
+    setUnlockError(null);
+    setConditionInputs({});
+    setDecryptedResult((current) => {
+      if (current?.downloadUrl) {
+        URL.revokeObjectURL(current.downloadUrl);
+      }
+      return null;
+    });
+  }, [policyId]);
+
   const policyQuery = useQuery({
     queryKey: ['ps-policy', policyId],
     queryFn: () => broker.getPolicy(policyId),
@@ -149,10 +195,24 @@ export default function PolicyDetailPage({ params }: { params: Promise<{ id: str
     refetchInterval: purchaseTxHash ? 3000 : false, // Poll after purchase until receipt appears
   });
 
-  const hasPurchased = !!purchaseTxHash || (receiptQuery.data != null && receiptQuery.data > 0n);
-
   const policy = currentPolicy;
+
+  // Detect if the connected wallet is the provider/publisher of this policy
+  const isProvider = useMemo(() => {
+    if (!address || !policy?.providerAddress) return false;
+    try {
+      return getAddress(address) === getAddress(policy.providerAddress);
+    } catch {
+      return address.toLowerCase() === policy.providerAddress.toLowerCase();
+    }
+  }, [address, policy?.providerAddress]);
+
+  const hasReceipt =
+    !isProvider && receiptQuery.data != null && receiptQuery.data > 0n;
+  const hasPurchased = !isProvider && (!!purchaseTxHash || hasReceipt);
+
   const metadata = parsePolicyMetadata(policy?.metadataJson);
+  const keyReleaseReady = policy?.keyReleaseReady === true && metadata != null;
   const purchaseConditionFields = useMemo(
     () =>
       (policy?.conditions ?? []).filter(
@@ -164,7 +224,7 @@ export default function PolicyDetailPage({ params }: { params: Promise<{ id: str
   const evaluatorCount = uniqueEvaluatorCount(policy?.conditions ?? []);
   const uaidGated = hasUaidGate(policy?.conditions ?? []);
   const chainMismatch =
-    isConnected && !!policy?.chainId && connectedChainId !== policy.chainId;
+    isConnected && !isProvider && !!policy?.chainId && connectedChainId !== policy.chainId;
   const priceLabel = useMemo(() => {
     if (!policy) return '—';
     try { return `${formatEther(BigInt(policy.priceWei))} ETH`; }
@@ -347,6 +407,18 @@ export default function PolicyDetailPage({ params }: { params: Promise<{ id: str
     targetNetwork.shortName === 'Arbitrum'
       ? 'UAID and ERC-8004 identity-gated policy path'
       : 'Primary finance-data marketplace flow';
+  const providerUaid = normalizeUaid(
+    policy.providerUaid ?? metadata?.providerUaid ?? null,
+  );
+  const providerTrustEmbedUrl = providerUaid
+    ? buildRegistryTrustEmbedUrl(providerUaid)
+    : null;
+  const providerProfileUrl = providerUaid
+    ? buildRegistryAgentProfileUrl(providerUaid)
+    : null;
+  const providerAddressSearchUrl = buildRegistryAddressSearchUrl(
+    policy.providerAddress,
+  );
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--surface-0)' }}>
@@ -405,6 +477,56 @@ export default function PolicyDetailPage({ params }: { params: Promise<{ id: str
             </div>
 
             <div>
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <h2 className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-tertiary)', letterSpacing: '0.08em' }}>
+                  Issuer Trust &amp; Reputation
+                </h2>
+                {providerProfileUrl ? (
+                  <a
+                    href={providerProfileUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs font-semibold hover:underline"
+                    style={{ color: 'var(--brand-blue)' }}
+                  >
+                    Open full agent profile ↗
+                  </a>
+                ) : (
+                  <a
+                    href={providerAddressSearchUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs font-semibold hover:underline"
+                    style={{ color: 'var(--brand-blue)' }}
+                  >
+                    Search seller address in registry ↗
+                  </a>
+                )}
+              </div>
+              {providerTrustEmbedUrl ? (
+                <div
+                  className="overflow-hidden rounded-2xl"
+                  style={{ border: '1px solid var(--border)', background: 'var(--surface-1)' }}
+                >
+                  <iframe
+                    src={providerTrustEmbedUrl}
+                    title={`Trust and reputation for ${providerUaid}`}
+                    loading="lazy"
+                    className="w-full"
+                    style={{ border: 'none', minHeight: 740, background: 'transparent' }}
+                  />
+                </div>
+              ) : (
+                <div
+                  className="rounded-2xl p-4 text-sm"
+                  style={{ border: '1px solid var(--border)', background: 'var(--surface-1)', color: 'var(--text-secondary)' }}
+                >
+                  Trust score is unavailable because this seller has not linked a Registry Broker UAID to the policy yet.
+                </div>
+              )}
+            </div>
+
+            <div>
               <h2 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: 'var(--text-tertiary)', letterSpacing: '0.08em' }}>Dataset Details</h2>
               <div className="flex flex-wrap gap-2">
                 {metadata?.mimeType && <span className="tag-subtle">{metadata.mimeType}</span>}
@@ -414,6 +536,75 @@ export default function PolicyDetailPage({ params }: { params: Promise<{ id: str
                 <span className="tag-subtle">{evaluatorCount} evaluator{evaluatorCount === 1 ? '' : 's'}</span>
               </div>
             </div>
+
+            {/* P0 #2 — Receipt Properties */}
+            <div>
+              <h2 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: 'var(--text-tertiary)', letterSpacing: '0.08em' }}>Access Receipt Properties</h2>
+              <div className="rounded-xl p-4 space-y-3" style={{ border: '1px solid var(--border)', background: 'var(--surface-1)' }}>
+                {[
+                  {
+                    icon: '🔒',
+                    label: 'Non-Transferable',
+                    desc: 'Receipt is an ERC-721 but transfers are blocked by design (ReceiptNonTransferable revert). Prevents resale and secondary-market leakage.',
+                    color: 'var(--accent-red)',
+                  },
+                  {
+                    icon: '⛓️',
+                    label: 'On-Chain Proof',
+                    desc: 'Receipt stores ciphertextHash + keyCommitment on-chain. Acts as a durable audit trail — receipt = historical proof, PaymentModule = runtime authorization.',
+                    color: 'var(--brand-blue)',
+                  },
+                  {
+                    icon: '🔑',
+                    label: 'Runtime-Checked Key Release',
+                    desc: 'Key Release Service validates both a signed buyer request AND active on-chain entitlement state before delivering the buyer-bound key envelope.',
+                    color: 'var(--brand-green)',
+                  },
+                ].map((prop) => (
+                  <div key={prop.label} className="flex items-start gap-3">
+                    <span className="text-base shrink-0 mt-0.5">{prop.icon}</span>
+                    <div>
+                      <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{prop.label}</p>
+                      <p className="text-xs leading-relaxed mt-0.5" style={{ color: 'var(--text-tertiary)' }}>{prop.desc}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* P1 #7 — ERC-8004 / UAID Checks (shown when UAID-gated) */}
+            {uaidGated && (
+              <div>
+                <h2 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: 'var(--text-tertiary)', letterSpacing: '0.08em' }}>Agent Identity Enforcement (ERC-8004)</h2>
+                <div className="rounded-xl p-4 space-y-2" style={{ border: '1px solid rgba(85,153,254,0.15)', background: 'rgba(85,153,254,0.03)' }}>
+                  <p className="text-sm mb-3 leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+                    This policy enforces agent identity ownership. Three on-chain checks must pass at purchase time:
+                  </p>
+                  {[
+                    {
+                      check: 'UAID String Required',
+                      desc: 'Buyer must supply a non-empty UAID string at purchase time.',
+                    },
+                    {
+                      check: 'UAID Hash Match',
+                      desc: 'The keccak256 hash of the buyer\'s UAID must match the policy\'s required UAID hash.',
+                    },
+                    {
+                      check: 'ERC-8004 Ownership',
+                      desc: 'Buyer\'s wallet must own the required agentId in the IdentityRegistry (ERC-721 based ERC-8004 singleton).',
+                    },
+                  ].map((item) => (
+                    <div key={item.check} className="flex items-start gap-2">
+                      <span className="text-xs mt-0.5" style={{ color: 'var(--brand-blue)' }}>✓</span>
+                      <div>
+                        <p className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>{item.check}</p>
+                        <p className="text-[11px]" style={{ color: 'var(--text-tertiary)' }}>{item.desc}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {policy.conditions.length > 0 && (
               <div className="space-y-3">
@@ -539,41 +730,66 @@ export default function PolicyDetailPage({ params }: { params: Promise<{ id: str
                 </p>
               </div>
 
-              <div className="flex items-center gap-1">
-                {[
-                  { label: 'Purchase', done: hasPurchased },
-                  { label: 'Unlock', done: !!decryptedResult },
-                  { label: 'View Data', done: !!decryptedResult },
-                ].map((step, i) => (
-                  <div key={step.label} className="flex items-center gap-1">
-                    {i > 0 && <div className="h-px w-4" style={{ background: step.done ? 'var(--accent-green)' : 'var(--border)' }} />}
-                    <div className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold" style={{ background: step.done ? 'rgba(34,197,94,0.1)' : 'var(--surface-3)', color: step.done ? 'var(--accent-green)' : 'var(--text-tertiary)' }}>
-                      {step.done && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>}
-                      {step.label}
+              {isProvider ? (
+                /* ── Provider / Publisher view ── */
+                <div className="space-y-3">
+                  <div className="rounded-xl p-4" style={{ border: '1px solid rgba(99,102,241,0.2)', background: 'rgba(99,102,241,0.06)' }}>
+                    <div className="flex items-center gap-2 mb-2">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--brand-blue)' }}>
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                      </svg>
+                      <span className="text-sm font-semibold" style={{ color: 'var(--brand-blue)' }}>You published this dataset</span>
                     </div>
+                    <p className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+                      Your connected wallet matches the provider address for this policy.
+                    </p>
                   </div>
-                ))}
-              </div>
-
-              {!isConnected ? (
-                <div className="rounded-xl p-4 text-center space-y-3" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
-                  <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>Connect wallet to purchase</p>
-                  <ConnectButton />
+                  <div className="rounded-xl p-3 flex items-center gap-2" style={{ border: '1px solid rgba(99,102,241,0.15)', background: 'rgba(99,102,241,0.04)' }}>
+                    <span className="h-2 w-2 rounded-full" style={{ background: 'var(--brand-blue)' }} />
+                    <span className="text-xs font-semibold truncate" style={{ color: 'var(--brand-blue)', fontFamily: 'var(--font-mono)' }}>{address}</span>
+                  </div>
                 </div>
               ) : (
-                <div className="space-y-2">
-                  <div className="rounded-xl p-3 flex items-center gap-2" style={{ border: '1px solid rgba(34,197,94,0.15)', background: 'rgba(34,197,94,0.04)' }}>
-                    <span className="h-2 w-2 rounded-full" style={{ background: 'var(--accent-green)' }} />
-                    <span className="text-xs font-semibold truncate" style={{ color: 'var(--accent-green)', fontFamily: 'var(--font-mono)' }}>{address}</span>
+                /* ── Buyer view ── */
+                <>
+                  <div className="flex items-center gap-1">
+                    {[
+                      { label: 'Purchase', done: hasPurchased },
+                      { label: 'Unlock', done: !!decryptedResult },
+                      { label: 'View Data', done: !!decryptedResult },
+                    ].map((step, i) => (
+                      <div key={step.label} className="flex items-center gap-1">
+                        {i > 0 && <div className="h-px w-4" style={{ background: step.done ? 'var(--accent-green)' : 'var(--border)' }} />}
+                        <div className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold" style={{ background: step.done ? 'rgba(34,197,94,0.1)' : 'var(--surface-3)', color: step.done ? 'var(--accent-green)' : 'var(--text-tertiary)' }}>
+                          {step.done && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>}
+                          {step.label}
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                  {chainMismatch && (
-                    <div className="rounded-lg p-3 text-xs" style={{ border: '1px solid rgba(245,158,11,0.25)', background: 'rgba(245,158,11,0.08)', color: 'var(--accent-amber)' }}>
-                      Wallet network mismatch. Switch to chain {policy.chainId} ({targetNetwork.shortName}) before purchasing.
+
+                  {!isConnected ? (
+                    <div className="rounded-xl p-4 text-center space-y-3" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
+                      <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>Connect wallet to purchase</p>
+                      <ConnectButton />
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="rounded-xl p-3 flex items-center gap-2" style={{ border: '1px solid rgba(34,197,94,0.15)', background: 'rgba(34,197,94,0.04)' }}>
+                        <span className="h-2 w-2 rounded-full" style={{ background: 'var(--accent-green)' }} />
+                        <span className="text-xs font-semibold truncate" style={{ color: 'var(--accent-green)', fontFamily: 'var(--font-mono)' }}>{address}</span>
+                      </div>
+                      {chainMismatch && (
+                        <div className="rounded-lg p-3 text-xs" style={{ border: '1px solid rgba(245,158,11,0.25)', background: 'rgba(245,158,11,0.08)', color: 'var(--accent-amber)' }}>
+                          Wallet network mismatch. Switch to chain {policy.chainId} ({targetNetwork.shortName}) before purchasing.
+                        </div>
+                      )}
                     </div>
                   )}
-                </div>
+                </>
               )}
 
+              {!isProvider && (
               <div className="space-y-3">
                 {purchaseConditionFields.length > 0 && (
                   <div
@@ -656,11 +872,15 @@ export default function PolicyDetailPage({ params }: { params: Promise<{ id: str
                 {hasPurchased && !decryptedResult && (
                   <div className="rounded-xl p-3 flex items-center gap-2" style={{ border: '1px solid rgba(34,197,94,0.2)', background: 'rgba(34,197,94,0.04)' }}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--accent-green)', flexShrink: 0 }}><polyline points="20 6 9 17 4 12" /></svg>
-                    <span className="text-xs font-semibold" style={{ color: 'var(--accent-green)' }}>Access receipt on-chain — ready to unlock</span>
+                    <span className="text-xs font-semibold" style={{ color: 'var(--accent-green)' }}>
+                      {keyReleaseReady
+                        ? 'Access receipt on-chain — ready to unlock'
+                        : 'Access receipt on-chain — waiting for off-chain payload indexing'}
+                    </span>
                   </div>
                 )}
 
-                {hasPurchased && !decryptedResult && (
+                {hasPurchased && !decryptedResult && keyReleaseReady && (
                   <button
                     onClick={() => unlockMutation.mutate()}
                     disabled={
@@ -680,6 +900,12 @@ export default function PolicyDetailPage({ params }: { params: Promise<{ id: str
                   </button>
                 )}
 
+                {hasPurchased && !decryptedResult && !keyReleaseReady && (
+                  <div className="rounded-lg p-3 text-xs" style={{ border: '1px solid rgba(245,158,11,0.25)', background: 'rgba(245,158,11,0.08)', color: 'var(--accent-amber)' }}>
+                    This policy exists on-chain, but the encrypted payload has not been indexed into the key release service yet. Purchase is provable, but browser decryption is not available until the provider publishes the off-chain payload.
+                  </div>
+                )}
+
                 {decryptedResult && (
                   <div className="rounded-xl p-3 flex items-center gap-2" style={{ border: '1px solid rgba(34,197,94,0.2)', background: 'rgba(34,197,94,0.04)' }}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--accent-green)', flexShrink: 0 }}><polyline points="20 6 9 17 4 12" /></svg>
@@ -687,6 +913,7 @@ export default function PolicyDetailPage({ params }: { params: Promise<{ id: str
                   </div>
                 )}
               </div>
+              )}
 
               {purchaseTxHash && (
                 <p className="text-center text-xs" style={{ color: 'var(--text-tertiary)' }}>
@@ -700,7 +927,7 @@ export default function PolicyDetailPage({ params }: { params: Promise<{ id: str
                 </div>
               )}
 
-              {!hasPurchased && !decryptedResult && (
+              {!isProvider && !hasPurchased && !decryptedResult && (
                 <p className="text-center text-xs leading-relaxed" style={{ color: 'var(--text-tertiary)' }}>
                   Purchase creates an on-chain receipt. Then unlock to retrieve the AES key and decrypt the data in your browser.
                 </p>

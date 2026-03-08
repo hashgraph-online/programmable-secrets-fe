@@ -80,6 +80,7 @@ export interface PolicyView {
   keyCommitment: string;
   metadataHash: string;
   metadataJson: Record<string, unknown> | null;
+  keyReleaseReady: boolean;
   policyVaultAddress: string;
   paymentModuleAddress: string;
   accessReceiptAddress: string;
@@ -157,8 +158,22 @@ export const broker = {
     return jsonRequest<PoliciesResponse>(q ? `/policies?${q}` : '/policies');
   },
 
-  getPolicy: (policyId: number) =>
-    jsonRequest<PolicyDetailResponse>(`/policies/${policyId}`),
+  getPolicy: async (policyId: number) => {
+    try {
+      return await jsonRequest<PolicyDetailResponse>(`/policies/${policyId}`);
+    } catch (error) {
+      if (!(error instanceof ApiError) || error.status !== 404) {
+        throw error;
+      }
+      const fallback = await jsonRequest<PoliciesResponse>('/policies?limit=200');
+      const matchedPolicy =
+        fallback.policies.find((policy) => policy.policyId === policyId) ?? null;
+      if (!matchedPolicy) {
+        throw error;
+      }
+      return { policy: matchedPolicy };
+    }
+  },
 
   getPolicyCiphertext: (policyId: number) =>
     arrayBufferRequest(`/policies/${policyId}/ciphertext`),

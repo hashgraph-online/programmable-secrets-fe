@@ -70,6 +70,7 @@ export interface ProgrammableSecretsPolicyView {
   providerUaid: string | null;
   providerUaidHash: string;
   metadataJson: Record<string, unknown> | null;
+  keyReleaseReady: boolean;
   createdTxHash: string | null;
   createdBlockNumber: number | null;
   policyCreatedAt: string | null;

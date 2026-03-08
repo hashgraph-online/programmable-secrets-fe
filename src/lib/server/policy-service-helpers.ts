@@ -117,6 +117,18 @@ export const mapPolicyRecordToView = (
   policy: HolProgrammableSecretPolicyRecord,
 ): ProgrammableSecretsPolicyView => {
   const metadataJson = toRecord(policy.metadataJson);
+  const keyReleaseReady =
+    typeof policy.ciphertextPath === 'string' &&
+    policy.ciphertextPath.length > 0 &&
+    typeof policy.contentKeyEnc === 'string' &&
+    policy.contentKeyEnc.length > 0 &&
+    typeof policy.contentKeyEncIv === 'string' &&
+    policy.contentKeyEncIv.length > 0 &&
+    typeof policy.contentKeyEncTag === 'string' &&
+    policy.contentKeyEncTag.length > 0 &&
+    typeof policy.contentKeyEncAad === 'string' &&
+    policy.contentKeyEncAad.length > 0 &&
+    metadataJson !== null;
   const declaredConditions = metadataJson
     ? parseMetadataPurchaseRequirements(
         metadataJson as ProgrammableSecretCanonicalMetadata,
@@ -152,6 +164,7 @@ export const mapPolicyRecordToView = (
     providerUaid: policy.providerUaid ?? null,
     providerUaidHash: policy.providerUaidHash,
     metadataJson,
+    keyReleaseReady,
     createdTxHash: policy.createdTxHash ?? null,
     createdBlockNumber: policy.createdBlockNumber ?? null,
     policyCreatedAt: toIsoString(policy.policyCreatedAt),

@@ -1,11 +1,80 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getPolicyService } from '@/lib/server/services';
+import { getPolicyService, getConfig } from '@/lib/server/services';
+import { ProgrammableSecretsChainClient } from '@/lib/server/chain-client';
+import { resolveProgrammableSecretsChainTarget } from '@/lib/server/contract-manifest';
+
+const logger = {
+  info: () => undefined,
+  warn: () => undefined,
+  debug: () => undefined,
+  error: () => undefined,
+};
 
 export async function GET() {
   try {
     const svc = await getPolicyService();
     const result = await svc.listPolicies();
-    return NextResponse.json({ policies: result, total: result.length });
+
+    if (result.length > 0) {
+      return NextResponse.json({ policies: result, total: result.length });
+    }
+
+    // Fallback: scan on-chain policies when DB is empty
+    const config = getConfig();
+    const target = resolveProgrammableSecretsChainTarget(config);
+    if (!target) {
+      return NextResponse.json({ policies: [], total: 0 });
+    }
+
+    const chainClient = new ProgrammableSecretsChainClient({
+      logger,
+      rpcUrl: target.rpcUrl,
+    });
+
+    const onchainPolicies = await chainClient.scanAllPolicies(
+      target.policyVaultAddress,
+    );
+    const policies = onchainPolicies
+      .filter((p) => p.active)
+      .map((p) => ({
+        id: `onchain-${target.chainId}-${p.policyId}`,
+        network: target.network,
+        chainId: target.chainId,
+        policyId: p.policyId,
+        status: 'indexed',
+        active: p.active,
+        providerAddress: p.provider,
+        providerUaid: null,
+        providerUaidHash: p.providerUaidHash,
+        payoutAddress: p.payout,
+        paymentToken: p.paymentToken,
+        priceWei: p.priceWei,
+        expiresAtUnix: null,
+        conditionsHash: p.conditionsHash,
+        conditionCount: p.conditionCount,
+        conditions: p.conditions.map((c, idx) => ({
+          index: idx,
+          evaluatorAddress: c.evaluatorAddress,
+          configHash: c.configHash,
+          configDataHex: c.configDataHex,
+          descriptor: null,
+          runtimeWitness: { kind: 'none' as const },
+        })),
+        declaredConditions: [],
+        ciphertextHash: p.ciphertextHash,
+        keyCommitment: p.keyCommitment,
+        metadataHash: p.metadataHash,
+        metadataJson: null,
+        keyReleaseReady: false,
+        policyVaultAddress: target.policyVaultAddress,
+        paymentModuleAddress: target.paymentModuleAddress,
+        accessReceiptAddress: target.accessReceiptAddress,
+        createdTxHash: null,
+        confirmedAt: null,
+        createdAt: new Date(p.createdAtUnix * 1000).toISOString(),
+      }));
+
+    return NextResponse.json({ policies, total: policies.length });
   } catch (err) {
     console.error('[api/ps/policies] GET error:', err);
     return NextResponse.json(
