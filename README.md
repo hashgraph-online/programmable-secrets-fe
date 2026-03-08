@@ -42,8 +42,6 @@ The frontend depends on the broader Programmable Secrets stack:
 | --- | --- |
 | [`hashgraph-online/programmable-secrets-contracts`](https://github.com/hashgraph-online/programmable-secrets-contracts) | Canonical contract ABIs, deployment manifests, and subgraph package. |
 | [`hashgraph-online/programmable-secrets-skill`](https://github.com/hashgraph-online/programmable-secrets-skill) | Skill package linked from the `/agents` onboarding flow. |
-| [`hashgraph-online/registry-broker`](https://github.com/hashgraph-online/registry-broker) | Optional broker-backed identity and agent discovery integration. |
-| [`hashgraph-online/points-portal`](https://github.com/hashgraph-online/points-portal) | Related downstream portal surface that can consume programmable-secrets data. |
 | [`erc-8004/erc-8004-contracts`](https://github.com/erc-8004/erc-8004-contracts) | Upstream ERC-8004 identity registry contracts used for UAID-gated flows. |
 
 For canonical addresses, always use the deployment manifests in `programmable-secrets-contracts` rather than copying values into frontend docs.
