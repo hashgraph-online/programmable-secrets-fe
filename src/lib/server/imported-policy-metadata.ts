@@ -1,4 +1,5 @@
-import { keccak256, toBytes } from 'viem';
+import { createUaid, parseHcs14Did, toEip155Caip10 } from '@hashgraphonline/standards-sdk';
+import { getAddress, keccak256, toBytes } from 'viem';
 import type { ProgrammableSecretCanonicalMetadata } from './types-shared';
 import type { ProgrammableSecretsPolicyView } from './types';
 
@@ -6,6 +7,9 @@ export interface ImportedPolicyBundleInput {
   contentKeyHex: string;
   ciphertextHex: string;
   providerUaid: string;
+  ciphertextHash?: string | null;
+  keyCommitment?: string | null;
+  providerUaidHash?: string | null;
   metadata?: ProgrammableSecretCanonicalMetadata | null;
   title?: string | null;
   description?: string | null;
@@ -86,8 +90,36 @@ export function computeImportedProviderUaidHash(
   return keccak256(toBytes(normalized));
 }
 
+function isValidHcs14Uaid(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed.startsWith('uaid:')) {
+    return false;
+  }
+  try {
+    parseHcs14Did(trimmed);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function resolveCanonicalImportedProviderUaid(params: {
+  bundleProviderUaid: string;
+  chainId: number;
+  providerAddress: string;
+}): string {
+  const trimmed = params.bundleProviderUaid.trim();
+  if (isValidHcs14Uaid(trimmed)) {
+    return trimmed;
+  }
+  const address = getAddress(params.providerAddress).toLowerCase();
+  const nativeId = toEip155Caip10(params.chainId, address);
+  return createUaid(`did:pkh:${nativeId}`, { nativeId });
+}
+
 export function buildImportedPolicyMetadata(params: {
   bundle: ImportedPolicyBundleInput;
+  providerUaid: string;
   policy: ProgrammableSecretsPolicyView;
 }): ProgrammableSecretCanonicalMetadata {
   const metadata = cloneMetadata(params.bundle.metadata);
@@ -110,7 +142,7 @@ export function buildImportedPolicyMetadata(params: {
     typeof metadata.providerUaid !== 'string' ||
     metadata.providerUaid.trim().length === 0
   ) {
-    metadata.providerUaid = params.bundle.providerUaid.trim();
+    metadata.providerUaid = params.providerUaid;
   }
   if (
     typeof metadata.priceWei !== 'string' ||

@@ -27,7 +27,7 @@ Goal: publish a TSLA buy signal on Robinhood testnet and create a 24 hour access
 Run these commands in order:
 1. npx skill-publish install-url --name programmable-secrets --version 1.0.1 --format latest-skill-md
 2. npx programmable-secret doctor
-3. npx programmable-secret krs encrypt --plaintext '{"signal":"buy","market":"TSLA","confidence":"high","thesis":"Breakout continuation"}' --title "TSLA buy signal" --provider-uaid did:uaid:hol:tsla-provider --output ./tsla-buy-signal-bundle.json
+3. npx programmable-secret krs encrypt --plaintext '{"signal":"buy","market":"TSLA","confidence":"high","thesis":"Breakout continuation"}' --title "TSLA buy signal" --provider-uaid 'uaid:did:eip155:46630:0x1111111111111111111111111111111111111111;nativeId=eip155:46630:0x1111111111111111111111111111111111111111' --output ./tsla-buy-signal-bundle.json
 4. npx programmable-secret datasets register --wallet provider --register-provider-agent true --provider-uaid-require-erc8004 false --bundle-file ./tsla-buy-signal-bundle.json
 5. Parse the dataset id from the previous command output.
 6. npx programmable-secret policies create-timebound --wallet provider --dataset-id <dataset-id> --price-eth 0.00001 --duration-hours 24 --receipt-transferable false --metadata-json '{"title":"TSLA buy signal 24 hour access"}'

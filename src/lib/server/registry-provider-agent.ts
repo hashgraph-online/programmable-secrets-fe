@@ -53,7 +53,7 @@ const normalizeAddress = (value: string): string | null => {
   }
 };
 
-const isAidUaid = (value: unknown): value is string => {
+const isValidHcs14Uaid = (value: unknown): value is string => {
   if (typeof value !== 'string') {
     return false;
   }
@@ -62,8 +62,8 @@ const isAidUaid = (value: unknown): value is string => {
     return false;
   }
   try {
-    const parsed = parseHcs14Did(trimmed);
-    return parsed.method === 'aid';
+    parseHcs14Did(trimmed);
+    return true;
   } catch {
     return false;
   }
@@ -177,7 +177,9 @@ export const resolveProviderAgentIdentity = async (params: {
   policyProviderUaid?: string | null;
 }): Promise<ResolvedProviderAgentIdentity> => {
   const canonicalPolicyUaid =
-    isAidUaid(params.policyProviderUaid) ? params.policyProviderUaid.trim() : null;
+    isValidHcs14Uaid(params.policyProviderUaid)
+      ? params.policyProviderUaid.trim()
+      : null;
   if (canonicalPolicyUaid) {
     return {
       uaid: canonicalPolicyUaid,
@@ -205,7 +207,7 @@ export const resolveProviderAgentIdentity = async (params: {
   });
 
   let candidates = Array.isArray(primaryResult.hits)
-    ? primaryResult.hits.filter((agent) => isAidUaid(agent.uaid))
+    ? primaryResult.hits.filter((agent) => isValidHcs14Uaid(agent.uaid))
     : [];
   if (candidates.length === 0) {
     const fallbackResult = await client.search({
@@ -213,7 +215,7 @@ export const resolveProviderAgentIdentity = async (params: {
       limit: 80,
     });
     candidates = Array.isArray(fallbackResult.hits)
-      ? fallbackResult.hits.filter((agent) => isAidUaid(agent.uaid))
+      ? fallbackResult.hits.filter((agent) => isValidHcs14Uaid(agent.uaid))
       : [];
   }
   if (candidates.length === 0) {
@@ -225,7 +227,7 @@ export const resolveProviderAgentIdentity = async (params: {
       candidates = Array.isArray(pingFallbackResult.hits)
         ? pingFallbackResult.hits.filter(
             (agent) =>
-              isAidUaid(agent.uaid) &&
+              isValidHcs14Uaid(agent.uaid) &&
               agent.registry === 'a2a-registry' &&
               agent.name.toLowerCase().includes('ping'),
           )

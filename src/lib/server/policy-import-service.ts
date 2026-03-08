@@ -4,6 +4,7 @@ type Logger = {
   debug: (...a: unknown[]) => void;
   error: (...a: unknown[]) => void;
 };
+import { keccak256 } from 'viem';
 import { ProgrammableSecretsChainClient } from './chain-client';
 import { resolveProgrammableSecretsChainTarget } from './contract-manifest';
 import {
@@ -11,6 +12,7 @@ import {
   computeImportedProviderUaidHash,
   decodeImportedCiphertext,
   decodeImportedContentKey,
+  resolveCanonicalImportedProviderUaid,
   type ImportedPolicyBundleInput,
 } from './imported-policy-metadata';
 import { buildOnchainPolicyView } from './onchain-policy-view';
@@ -96,22 +98,50 @@ export class ProgrammableSecretsPolicyImportService {
 
     const ciphertext = decodeImportedCiphertext(input.bundle);
     const contentKey = decodeImportedContentKey(input.bundle);
-    const ciphertextHash = sha256Hex(ciphertext);
-    const keyCommitment = sha256Hex(contentKey);
+    const ciphertextHashSha256 = sha256Hex(ciphertext);
+    const ciphertextHashKeccak = keccak256(`0x${ciphertext.toString('hex')}`);
+    const keyCommitmentSha256 = sha256Hex(contentKey);
+    const keyCommitmentKeccak = keccak256(`0x${contentKey.toString('hex')}`);
     const providerUaidHash = computeImportedProviderUaidHash(
       input.bundle.providerUaid,
     );
 
-    if (ciphertextHash !== onchainPolicy.ciphertextHash) {
+    if (
+      input.bundle.ciphertextHash &&
+      input.bundle.ciphertextHash.toLowerCase() !== onchainPolicy.ciphertextHash
+    ) {
+      throw new Error('bundle ciphertextHash does not match the on-chain policy');
+    }
+    if (
+      input.bundle.keyCommitment &&
+      input.bundle.keyCommitment.toLowerCase() !== onchainPolicy.keyCommitment
+    ) {
+      throw new Error('bundle keyCommitment does not match the on-chain policy');
+    }
+    if (
+      input.bundle.providerUaidHash &&
+      input.bundle.providerUaidHash.toLowerCase() !== onchainPolicy.providerUaidHash
+    ) {
+      throw new Error('bundle providerUaidHash does not match the on-chain policy');
+    }
+    if (
+      ciphertextHashSha256 !== onchainPolicy.ciphertextHash &&
+      ciphertextHashKeccak !== onchainPolicy.ciphertextHash
+    ) {
       throw new Error('bundle ciphertext does not match the on-chain policy');
     }
-    if (keyCommitment !== onchainPolicy.keyCommitment) {
+    if (
+      keyCommitmentSha256 !== onchainPolicy.keyCommitment &&
+      keyCommitmentKeccak !== onchainPolicy.keyCommitment
+    ) {
       throw new Error('bundle content key does not match the on-chain policy');
     }
     if (providerUaidHash !== onchainPolicy.providerUaidHash) {
       throw new Error('bundle providerUaid does not match the on-chain policy');
     }
 
+    const ciphertextHash = onchainPolicy.ciphertextHash;
+    const keyCommitment = onchainPolicy.keyCommitment;
     const ciphertextPath = await this.ciphertextStore.writeCiphertext(
       ciphertextHash,
       ciphertext,
@@ -125,8 +155,14 @@ export class ProgrammableSecretsPolicyImportService {
       policy: onchainPolicy,
       target,
     });
+    const canonicalProviderUaid = resolveCanonicalImportedProviderUaid({
+      bundleProviderUaid: input.bundle.providerUaid,
+      chainId: target.chainId,
+      providerAddress: onchainPolicy.provider,
+    });
     const metadataJson = buildImportedPolicyMetadata({
       bundle: input.bundle,
+      providerUaid: canonicalProviderUaid,
       policy: onchainView,
     });
     const confirmedAt = new Date();
@@ -156,7 +192,7 @@ export class ProgrammableSecretsPolicyImportService {
       keyCommitment,
       metadataHash: onchainPolicy.metadataHash,
       providerUaidHash,
-      providerUaid: input.bundle.providerUaid.trim(),
+      providerUaid: canonicalProviderUaid,
       ciphertextPath,
       encryptedKeyPayload,
       metadataJson,

@@ -504,7 +504,7 @@ npx programmable-secret doctor`}</CodeBlock>
                   <p className="text-sm font-semibold mb-2" style={{ color: 'var(--text-primary)' }}>3. Register a dataset as a provider</p>
                   <CodeBlock title="terminal">{`# Register a new dataset
 npx programmable-secret datasets register \\
-  --provider-uaid "did:uaid:hol:quantlab?uid=quantlab&registry=hol&proto=hol&nativeId=quantlab" \\
+  --provider-uaid "uaid:did:eip155:46630:0x1111111111111111111111111111111111111111;nativeId=eip155:46630:0x1111111111111111111111111111111111111111" \\
   --metadata-json '{"title":"TSLA Vol Surface"}' \\
   --ciphertext "encrypted payload" \\
   --key-material "wrapped key"

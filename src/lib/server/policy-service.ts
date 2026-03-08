@@ -147,6 +147,11 @@ export class ProgrammableSecretsPolicyService {
 
       return {
         ...view,
+        active: onchainPolicy.active,
+        providerAddress: onchainPolicy.provider,
+        payoutAddress: onchainPolicy.payout,
+        paymentToken: onchainPolicy.paymentToken,
+        priceWei: onchainPolicy.priceWei,
         datasetId: onchainPolicy.datasetId,
         conditionsHash: onchainPolicy.conditionsHash,
         conditionCount: onchainPolicy.conditionCount,

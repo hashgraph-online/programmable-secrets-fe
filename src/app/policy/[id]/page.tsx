@@ -70,12 +70,12 @@ function normalizeUaid(value: string | null | undefined): string | null {
     return null;
   }
   const trimmed = value.trim();
-  if (!trimmed.toLowerCase().startsWith('uaid:')) {
+  if (!trimmed.startsWith('uaid:')) {
     return null;
   }
   try {
-    const parsed = parseHcs14Did(trimmed);
-    return parsed.method === 'aid' ? trimmed : null;
+    parseHcs14Did(trimmed);
+    return trimmed;
   } catch {
     return null;
   }
