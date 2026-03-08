@@ -165,7 +165,8 @@ async function main() {
 
   const account = privateKeyToAccount(pk);
   const address = account.address;
-  const providerUaid = `uaid:eip155:46630:${address.toLowerCase()}`;
+  const nativeId = toEip155Caip10(robinhoodTestnet.id, getAddress(address));
+  const providerUaid = createUaid(`did:pkh:${nativeId}`, { nativeId });
   console.log(`Provider: ${address}`);
   console.log(`UAID:     ${providerUaid}\n`);
 
